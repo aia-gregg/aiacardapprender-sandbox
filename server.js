@@ -1,4 +1,4 @@
-// server.js
+// server
 const express = require('express');
 const cors = require('cors');
 const bcryptjs = require('bcryptjs');
