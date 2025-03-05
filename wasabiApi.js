@@ -4,10 +4,8 @@ const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fet
 
 const WASABI_BASE_URL = "https://sandbox-api-merchant.wasabicard.com";
 
-const apiKey = process.env.WASABI_API_KEY || "your_wasabi_api_key";
-const merchantPrivateKey = process.env.MERCHANT_PRIVATE_KEY || `-----BEGIN RSA PRIVATE KEY-----
-YOUR_PRIVATE_KEY_HERE
------END RSA PRIVATE KEY-----`;
+const apiKey = process.env.WASABI_API_KEY;
+const merchantPrivateKey = process.env.WASABI_PRIVATE_KEY;
 
 function generateSignature(message, privateKey) {
   const signer = crypto.createSign('RSA-SHA256');

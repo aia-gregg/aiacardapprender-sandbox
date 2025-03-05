@@ -7,11 +7,11 @@ const nodemailer = require('nodemailer');
 const { MongoClient, ServerApiVersion } = require('mongodb');
 const crypto = require('crypto');
 const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY || 'sk_test_...');
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const { callWasabiApi } = require('./wasabiApi');
 
 // MongoDB Connection URI (set via environment variable on Render)
-const uri = process.env.MONGODB_URI || "mongodb://localhost:27017/your-local-db";
+const uri = process.env.MONGODB_URI;
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -53,10 +53,10 @@ async function openCard(holderId) {
   }
 }
 
-const secretKey = process.env.JWT_SECRET || "your_super_secret_key";
+const secretKey = process.env.JWT_SECRET;
 
 const app = express();
-const port = process.env.PORT || 3000;
+const port = process.env.PORT;
 
 app.use(cors());
 app.use(express.json());
@@ -75,8 +75,8 @@ const transporter = nodemailer.createTransport({
   port: 587,
   secure: false,
   auth: {
-    user: process.env.EMAIL_USER || "verify@card.aianalysis.group",
-    pass: process.env.EMAIL_PASS || "your-email-password",
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
   },
   tls: { ciphers: 'SSLv3' }
 });
@@ -110,7 +110,7 @@ app.post('/register', async (req, res) => {
     console.log(`📩 Generated OTP for ${email}: ${otp}`);
 
     await transporter.sendMail({
-      from: process.env.EMAIL_USER || "verify@card.aianalysis.group",
+      from: process.env.EMAIL_USER,
       to: email,
       subject: "Your OTP Code",
       text: `Your OTP code is: ${otp}. It is valid for 10 minutes.`
@@ -235,7 +235,7 @@ app.post('/login', async (req, res) => {
     await collection.updateOne({ email }, { $set: { otp, otpExpiry } });
 
     await transporter.sendMail({
-      from: process.env.EMAIL_USER || "verify@card.aianalysis.group",
+      from: process.env.EMAIL_USER,
       to: email,
       subject: "Your Login OTP Code",
       text: `Your OTP code for login is: ${otp}. It is valid for 10 minutes.`
