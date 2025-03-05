@@ -4,17 +4,17 @@
     "description": "An Express server migrated to Render",
     "main": "server.js",
     "scripts": {
-      "start": "NODE_OPTIONS=--openssl-legacy-provider node server.js"
+        "start": "NODE_OPTIONS=--openssl-legacy-provider node server.js"
     },
     "dependencies": {
-      "express": "^4.18.2",
-      "cors": "^2.8.5",
-      "bcryptjs": "^2.4.3",
-      "jsonwebtoken": "^9.0.0",
-      "nodemailer": "^6.9.1",
-      "mongodb": "^4.10.0",
-      "node-fetch": "^2.6.7",
-      "stripe": "^8.219.0"
+        "bcryptjs": "^2.4.3",
+        "cors": "^2.8.5",
+        "dotenv": "^16.4.7",
+        "express": "^4.18.2",
+        "jsonwebtoken": "^9.0.0",
+        "mongodb": "^4.10.0",
+        "node-fetch": "^2.6.7",
+        "nodemailer": "^6.9.1",
+        "stripe": "^8.219.0"
     }
-  }
-  
+}
