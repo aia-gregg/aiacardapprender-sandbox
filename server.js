@@ -168,6 +168,46 @@ app.post('/verify-otp', async (req, res) => {
   }
 });
 
+// OTP Verification for Login
+app.post('/verify-login-otp', async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    const database = client.db("aiacard-sandbox-db");
+    const collection = database.collection("aiacard-sandox-col");
+
+    const user = await collection.findOne({ email });
+    if (!user || user.otp !== otp || new Date(user.otpExpiry) < new Date()) {
+      return res.status(400).json({ success: false, message: "Invalid or expired OTP. Please try again." });
+    }
+
+    await collection.updateOne({ email }, { $unset: { otp: "", otpExpiry: "" } });
+
+    const token = jwt.sign({ id: user._id, email: user.email }, secretKey, { expiresIn: '1h' });
+    console.log(`✅ OTP verified for ${email}. User is now logged in.`);
+
+    res.status(200).json({
+      success: true,
+      token,
+      user: {
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        photo: user.photo,
+        birthday: user.birthday,
+        address: user.address,
+        town: user.town,
+        postCode: user.postCode,
+        country: user.country,
+        referralId: user.referralId,
+        holderId: user.holderId,
+      }
+    });
+  } catch (error) {
+    console.error("❌ Error verifying login OTP:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
 // --- Login & OTP Send Endpoint ---
 app.post('/login', async (req, res) => {
   try {
