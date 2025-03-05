@@ -5,7 +5,7 @@ const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fet
 const WASABI_BASE_URL = "https://sandbox-api-merchant.wasabicard.com";
 
 const apiKey = process.env.WASABI_API_KEY;
-const merchantPrivateKey = process.env.WASABI_PRIVATE_KEY;
+const merchantPrivateKey = Buffer.from(process.env.WASABI_PRIVATE_KEY_B64, 'base64').toString('utf8');
 console.log("Merchant Private Key starts with:", merchantPrivateKey.slice(0, 30));
 
 function generateSignature(message, privateKey) {
