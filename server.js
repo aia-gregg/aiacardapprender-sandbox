@@ -249,6 +249,169 @@ app.post('/login', async (req, res) => {
   }
 });
 
+// Forgot Password OTP Endpoint
+app.post('/forgot-password-otp', async (req, res) => {
+    try {
+      const { email } = req.body;
+      if (!email) {
+        return res.status(400).json({ success: false, message: "Email is required." });
+      }
+      const database = client.db("aiacard-sandbox-db");
+      const collection = database.collection("aiacard-sandox-col");
+  
+      const user = await collection.findOne({ email });
+      if (!user) {
+        return res.status(404).json({ success: false, message: "Invalid email address." });
+      }
+  
+      const otp = generateOTP();
+      const otpExpiry = new Date(Date.now() + 10 * 60000); // valid for 10 minutes
+  
+      await collection.updateOne({ email }, {
+        $set: {
+          forgotPasswordOtp: otp,
+          forgotPasswordExpiry: otpExpiry,
+        },
+      });
+  
+      console.log(`🔑 Generated Forgot Password OTP for ${email}: ${otp}`);
+  
+      await transporter.sendMail({
+        from: "verify@card.aianalysis.group",
+        to: email,
+        subject: "Your Forgot Password OTP Code",
+        text: `Your OTP code for password recovery is: ${otp}. It is valid for 10 minutes.`,
+      });
+  
+      res.status(200).json({ success: true, message: "OTP sent to your email address." });
+    } catch (error) {
+      console.error("❌ Error in /forgot-password-otp:", error);
+      res.status(500).json({ success: false, message: "Server error" });
+    }
+  });
+  
+  // Forgot Change Password Endpoint (updated)
+  app.post('/forgot-change-password', async (req, res) => {
+    try {
+      const { email, otp, newPassword } = req.body;
+      if (!email || !otp || !newPassword) {
+        return res.status(400).json({ success: false, message: "Email, OTP and new password are required." });
+      }
+      const database = client.db("aiacard-sandbox-db");
+      const collection = database.collection("aiacard-sandox-col");
+      const user = await collection.findOne({ email });
+      if (!user) {
+        return res.status(404).json({ success: false, message: "User not found." });
+      }
+      if (user.forgotPasswordOtp !== otp || !user.forgotPasswordExpiry || new Date(user.forgotPasswordExpiry) < new Date()) {
+        return res.status(400).json({ success: false, message: "Invalid or expired OTP." });
+      }
+      // Hash the new password
+      const hashedNewPassword = await bcryptjs.hash(newPassword, 10);
+      const updateResult = await collection.updateOne({ email }, {
+        $set: { password: hashedNewPassword },
+        $unset: { forgotPasswordOtp: "", forgotPasswordExpiry: "" }
+      });
+      if (updateResult.modifiedCount > 0) {
+        const updatedUser = await collection.findOne({ email });
+        const newToken = jwt.sign(
+          { id: updatedUser._id, email: updatedUser.email },
+          secretKey,
+          { expiresIn: '1h' }
+        );
+        console.log(`✅ Password updated for ${email}. New token generated.`);
+        return res.status(200).json({
+          success: true,
+          message: "Password updated successfully.",
+          token: newToken,
+          user: updatedUser
+        });
+      } else {
+        return res.status(400).json({ success: false, message: "Failed to update password." });
+      }
+    } catch (error) {
+      console.error("❌ Error in /forgot-change-password:", error);
+      return res.status(500).json({ success: false, message: "Server error" });
+    }
+  });
+  
+  // Verify Forgot Password OTP Endpoint
+  app.post('/verify-forgot-password-otp', async (req, res) => {
+    try {
+      const { email, otp } = req.body;
+      if (!email || !otp) {
+        return res.status(400).json({ success: false, message: "Email and OTP are required." });
+      }
+      const database = client.db("aiacard-sandbox-db");
+      const collection = database.collection("aiacard-sandox-col");
+      const user = await collection.findOne({ email });
+      if (!user) {
+        return res.status(404).json({ success: false, message: "User not found." });
+      }
+      if (user.forgotPasswordOtp !== otp || !user.forgotPasswordExpiry || new Date(user.forgotPasswordExpiry) < new Date()) {
+        return res.status(400).json({ success: false, message: "Invalid or expired OTP." });
+      }
+      // OTP is valid
+      res.status(200).json({ success: true, message: "OTP verified successfully." });
+    } catch (error) {
+      console.error("❌ Error in /verify-forgot-password-otp:", error);
+      res.status(500).json({ success: false, message: "Server error" });
+    }
+  });
+  
+  // Add this new endpoint at an appropriate place in your server.js file
+  
+  app.post('/create-zendesk-ticket', async (req, res) => {
+    try {
+      // Expecting these fields from the client:
+      const { subject, message, requesterName, requesterEmail } = req.body;
+      if (!subject || !message || !requesterName || !requesterEmail) {
+        return res.status(400).json({ success: false, message: "Missing required fields" });
+      }
+      
+      // Zendesk credentials (you can also load these from environment variables)
+      const zendeskSubdomain = 'aianalysisexchange';
+      const zendeskEmail = 'info@aianalysis.group';
+      const zendeskApiToken = 'cAab9YFtbmFEdE7h29Z4p46oHltjkzrE8Co50K9n';
+      
+      // Use asynchronous ticket creation by adding ?async=true to the endpoint
+      const zendeskEndpoint = 'tickets.json?async=true';
+      const url = `https://${zendeskSubdomain}.zendesk.com/api/v2/${zendeskEndpoint}`;
+      const auth = `${zendeskEmail}/token:${zendeskApiToken}`;
+      const encodedAuth = Buffer.from(auth).toString('base64');
+  
+      const payload = {
+        ticket: {
+          subject: subject,
+          comment: { body: message },
+          requester: {
+            name: requesterName,
+            email: requesterEmail,
+          },
+        },
+      };
+  
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Basic " + encodedAuth,
+        },
+        body: JSON.stringify(payload),
+      });
+  
+      const data = await response.json();
+      if (response.status === 202) {
+        return res.json({ success: true, message: "Ticket creation accepted", data });
+      } else {
+        return res.status(response.status).json({ success: false, message: "Ticket creation failed", data });
+      }
+    } catch (error) {
+      console.error("Error creating Zendesk ticket:", error);
+      return res.status(500).json({ success: false, message: "Server error", error: error.toString() });
+    }
+  });
+
 // --- Resend and Verify OTP endpoints, Profile Update, Change Email/Phone/Password endpoints, Payment, etc. ---
 // (Include the remaining endpoints as in your local version.)
 
