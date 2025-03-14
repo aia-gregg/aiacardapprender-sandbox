@@ -21,6 +21,8 @@ const client = new MongoClient(uri, {
   }
 });
 
+// test comment
+
 function generateSignature(message, privateKey) {
   const signer = crypto.createSign('RSA-SHA256');
   signer.update(message);
