@@ -72,9 +72,10 @@ client.connect()
   // function generateOTP() {
   //   return Math.floor(100000 + Math.random() * 900000).toString();
   // }
+  // 6-digit OTP
 
   function generateOTP() {
-    return Math.floor(1000 + Math.random() * 9000).toString();
+    return Math.floor(1000 + Math.random() * 9000).toString(); // 4-digit OTP
   }
 
 const transporter = nodemailer.createTransport({
