@@ -48,7 +48,7 @@ async function openCard(holderId, email) {
     merchantOrderNo: generateMerchantOrderNo(),
     holderId: holderId,
     cardTypeId: 111016,
-    amount: 50
+    amount: 30
   };
 
   try {
