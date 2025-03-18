@@ -169,18 +169,17 @@ app.post('/webhook', express.json({
       const database = client.db("aiacard-sandbox-db");
       const collection = database.collection("aiacard-sandox-col");
 
-      // Lookup the user by orderNo and type 'create'
-      // This ensures that only card orders (and not deposits) are processed.
-      const user = await collection.findOne({ orderNo: orderNo, type: 'create' });
+      // Lookup the user by orderNo only
+      const user = await collection.findOne({ orderNo: orderNo });
       if (!user) {
-        console.error(`No user found with orderNo: ${orderNo} and type 'create'`);
+        console.error(`No user found with orderNo: ${orderNo}`);
         return;
       }
 
       // Determine the current number of active cards (default to 0 if not set)
       const activeCards = user.activeCards || 0;
       const newCardIndex = activeCards + 1;
-      // Create a new field name, for example "cardNo1", "cardNo2", etc.
+      // Create a new field name, e.g., "cardNo1", "cardNo2", etc.
       const cardFieldName = `cardNo${newCardIndex}`;
 
       // Update the user record: add the new cardNo field and increment activeCards
