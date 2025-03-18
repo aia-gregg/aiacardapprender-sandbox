@@ -80,6 +80,43 @@ function generateOTP() {
   // 6-digit OTP
 
 
+  // Webhook endpoint for Wasabi API
+// Use express.json with a custom verify function to capture the raw body for signature verification
+app.post('/webhook', express.json({
+  verify: (req, res, buf) => {
+    req.rawBody = buf.toString();
+  }
+}), (req, res) => {
+  // Log the raw payload
+  console.log('Webhook raw payload:', req.rawBody);
+  
+  // Log the parsed JSON payload
+  console.log('Webhook parsed payload:', req.body);
+
+  // (Optional) If Wasabi sends a signature header (e.g., 'x-signature'), verify it.
+  const signature = req.headers['x-signature'];
+  if (signature) {
+    // Compute the HMAC using SHA256 and your shared secret (set in your environment variables)
+    const computedSignature = crypto.createHmac('sha256', process.env.WASABI_WEBHOOK_SECRET)
+                                    .update(req.rawBody)
+                                    .digest('hex');
+    console.log('Computed signature:', computedSignature);
+    console.log('Received signature:', signature);
+    
+    if (computedSignature !== signature) {
+      console.error('Signature verification failed.');
+      return res.status(403).send('Forbidden: Invalid signature.');
+    }
+  } else {
+    console.log('No signature header found.');
+  }
+
+  // Process the webhook event here as needed
+
+  // Acknowledge receipt
+  res.status(200).send('Webhook received');
+});
+
 // Nodemailer Configuration
 const transporter = nodemailer.createTransport({
   host: "smtp-mail.outlook.com",
@@ -1210,6 +1247,8 @@ app.post('/card-details', async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 });
+
+
 
 const server = app.listen(port, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${port}`);
