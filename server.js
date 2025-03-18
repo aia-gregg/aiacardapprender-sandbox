@@ -79,7 +79,7 @@ function generateOTP() {
   // }
   // 6-digit OTP
 
-  
+
 // Nodemailer Configuration
 const transporter = nodemailer.createTransport({
   host: "smtp-mail.outlook.com",
@@ -1158,6 +1158,35 @@ app.post('/create-cardholder', async (req, res) => {
     res.json({ success: true, data: wasabiResult });
   } catch (error) {
     console.error("Error creating cardholder on WasabiCard API:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Card Details API from Wasabi
+// Card Info Endpoint from Wasabi
+app.post('/card-info', async (req, res) => {
+  try {
+    // Validate that cardNo is provided
+    const { cardNo, onlySimpleInfo = false } = req.body;
+    if (!cardNo) {
+      return res.status(400).json({ success: false, message: "cardNo is required" });
+    }
+
+    // Build the payload as expected by Wasabi's API.
+    const payload = {
+      cardNo,
+      onlySimpleInfo, // Set to false to get full details including balance info
+    };
+
+    // Forward the request to Wasabi's API endpoint using your helper function.
+    // The documented endpoint is '/merchant/core/mcb/card/info'
+    const wasabiResponse = await callWasabiApi('/merchant/core/mcb/card/info', payload);
+    console.log("WasabiCard API card info response:", wasabiResponse);
+
+    // Return the Wasabi response back to the client.
+    res.json(wasabiResponse);
+  } catch (error) {
+    console.error("Error fetching card info:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
