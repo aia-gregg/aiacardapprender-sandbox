@@ -195,7 +195,7 @@ app.post('/webhook', express.json({
       }
 
       // Determine the current number of active cards (default to 0 if not set)
-      const activeCards = user.activeCards || 0;
+      // const activeCards = user.activeCards || 0;
       // const newCardIndex = activeCards + 1;
       // Create a new field name, e.g., "cardNo1", "cardNo2", etc.
       const cardFieldName = `cardNo${newCardIndex}`;
