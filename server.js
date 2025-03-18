@@ -37,7 +37,7 @@ function generateMerchantOrderNo(length = 22) {
 }
 
 // Function to open a card using the WasabiCard API and log orderNo to MongoDB
-async function openCard(holderId, email, AIACardId) {
+async function openCard(holderId, email, aiaCardId) {
   if (!holderId) {
     const errorMsg = 'Invalid holderId provided to openCard';
     console.error(errorMsg);
@@ -49,7 +49,7 @@ async function openCard(holderId, email, AIACardId) {
     holderId: holderId,
     cardTypeId: 111016,
     amount: 40,
-    AIACardId: "lite",
+    aiaCardId: aiaCardId, // Use the passed AIACardId (e.g., 'lite', 'pro', or 'elite')
   };
 
   try {
@@ -67,15 +67,21 @@ async function openCard(holderId, email, AIACardId) {
       const database = client.db("aiacard-sandbox-db");
       const collection = database.collection("aiacard-sandox-col");
 
-      // Update the user record by lookup using the provided holderId,
-      // and push the orderNo.
+      // First, retrieve the user document using the holderId so we can get activeCards count.
+      const user = await collection.findOne({ holderId: holderId });
+      const activeCards = user && user.activeCards ? user.activeCards : 0;
+      const newCardIndex = activeCards + 1;
+      const cardAIAField = `cardNo${newCardIndex}AIAId`; // e.g., cardNo1AIAId
+
+      // Update the user record by lookup using the provided holderId:
+      // set the orderNo and the new cardAIAField, and increment activeCards.
       const updateResult = await collection.updateOne(
         { holderId: holderId },
-        { $set: { orderNo } }
+        { $set: { orderNo, [cardAIAField]: aiaCardId }, $inc: { activeCards: 1 } }
       );
 
       if (updateResult.modifiedCount > 0) {
-        console.log(`User with holderId ${holderId} updated with orderNo: ${orderNo}`);
+        console.log(`User with holderId ${holderId} updated with orderNo: ${orderNo} and ${cardAIAField}: ${aiaCardId}`);
       } else {
         console.error(`Failed to update user with holderId ${holderId} with orderNo: ${orderNo}`);
       }
