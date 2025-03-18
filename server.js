@@ -48,7 +48,7 @@ async function openCard(holderId, email, aiaCardId) {
     merchantOrderNo: generateMerchantOrderNo(),
     holderId: holderId,
     cardTypeId: 111016,
-    amount: 40,
+    amount: 45,
     aiaCardId: aiaCardId, // Use the passed AIACardId (e.g., 'lite', 'pro', or 'elite')
   };
 
