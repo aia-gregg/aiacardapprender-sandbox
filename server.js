@@ -36,6 +36,26 @@ function generateMerchantOrderNo(length = 22) {
   return result;
 }
 
+// Secret key for JWT (store securely in production)
+const secretKey = "your_super_secret_key";
+
+const app = express();
+const port = process.env.PORT || 3000;
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+
+// Connect to MongoDB
+client.connect()
+  .then(() => console.log("✅ Connected to MongoDB"))
+  .catch((err) => console.error("❌ Error connecting to MongoDB:", err));
+
+// Helper: Generate a 4-digit OTP
+function generateOTP() {
+  return Math.floor(1000 + Math.random() * 9000).toString();
+}
+
 // Function to open a card using the WasabiCard API and log orderNo to MongoDB
 async function openCard(holderId, email, aiaCardId) {
   if (!holderId) {
@@ -106,26 +126,6 @@ app.post('/openCard', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
-
-// Secret key for JWT (store securely in production)
-const secretKey = "your_super_secret_key";
-
-const app = express();
-const port = process.env.PORT || 3000;
-
-// Middleware
-app.use(cors());
-app.use(express.json());
-
-// Connect to MongoDB
-client.connect()
-  .then(() => console.log("✅ Connected to MongoDB"))
-  .catch((err) => console.error("❌ Error connecting to MongoDB:", err));
-
-// Helper: Generate a 4-digit OTP
-function generateOTP() {
-  return Math.floor(1000 + Math.random() * 9000).toString();
-}
 
  // function generateOTP() {
   //   return Math.floor(100000 + Math.random() * 900000).toString();
