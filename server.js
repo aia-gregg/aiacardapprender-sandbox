@@ -69,9 +69,9 @@ client.connect()
   .then(() => console.log("✅ Connected to MongoDB"))
   .catch((err) => console.error("❌ Error connecting to MongoDB:", err));
 
-function generateOTP() {
-  return Math.floor(1000 + Math.random() * 9000).toString();
-}
+  function generateOTP() {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+  }
 
 const transporter = nodemailer.createTransport({
   host: "smtp-mail.outlook.com",
