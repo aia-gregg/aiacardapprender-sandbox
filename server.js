@@ -37,7 +37,7 @@ function generateMerchantOrderNo(length = 22) {
 }
 
 // Function to open a card using the WasabiCard API and log orderNo to MongoDB
-async function openCard(holderId, email) {
+async function openCard(holderId, email, AIACardId) {
   if (!holderId) {
     const errorMsg = 'Invalid holderId provided to openCard';
     console.error(errorMsg);
@@ -48,7 +48,8 @@ async function openCard(holderId, email) {
     merchantOrderNo: generateMerchantOrderNo(),
     holderId: holderId,
     cardTypeId: 111016,
-    amount: 30
+    amount: 40,
+    AIACardId: "lite",
   };
 
   try {
