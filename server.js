@@ -66,16 +66,17 @@ async function openCard(holderId, email) {
       const database = client.db("aiacard-sandbox-db");
       const collection = database.collection("aiacard-sandox-col");
 
-      // Update the user record with type 'create' matching the provided email
+      // Update the user record by lookup using the provided holderId,
+      // and push the orderNo.
       const updateResult = await collection.updateOne(
-        { email: email, type: 'create' },
+        { holderId: holderId },
         { $set: { orderNo } }
       );
 
       if (updateResult.modifiedCount > 0) {
-        console.log(`User ${email} updated with orderNo: ${orderNo}`);
+        console.log(`User with holderId ${holderId} updated with orderNo: ${orderNo}`);
       } else {
-        console.error(`Failed to update user ${email} with orderNo: ${orderNo}`);
+        console.error(`Failed to update user with holderId ${holderId} with orderNo: ${orderNo}`);
       }
     } else {
       console.error('No orderNo found in the Wasabi API response.');
