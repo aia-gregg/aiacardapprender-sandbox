@@ -38,12 +38,19 @@ function generateMerchantOrderNo(length = 22) {
 
 // Function to open a card using the WasabiCard API
 async function openCard(holderId) {
+  if (!holderId) {
+    const errorMsg = 'Invalid holderId provided to openCard';
+    console.error(errorMsg);
+    throw new Error(errorMsg);
+  }
+
   const payload = {
     merchantOrderNo: generateMerchantOrderNo(),
     holderId: holderId,
     cardTypeId: 111016,
     amount: 50
   };
+
   try {
     const response = await callWasabiApi('/merchant/core/mcb/card/openCard', payload);
     console.log('Card opened successfully:', response);
@@ -80,41 +87,41 @@ function generateOTP() {
   // 6-digit OTP
 
    // Webhook endpoint for Wasabi API
-// Use express.json with a custom verify function to capture the raw body for signature verification
-app.post('/webhook', express.json({
-  verify: (req, res, buf) => {
-    req.rawBody = buf.toString();
-  }
-}), (req, res) => {
-  // Log the raw payload
-  console.log('Webhook raw payload:', req.rawBody);
-  
-  // Log the parsed JSON payload
-  console.log('Webhook parsed payload:', req.body);
-
-  // (Optional) If Wasabi sends a signature header (e.g., 'x-signature'), verify it.
-  const signature = req.headers['x-signature'];
-  if (signature) {
-    // Compute the HMAC using SHA256 and your shared secret (set in your environment variables)
-    const computedSignature = crypto.createHmac('sha256', process.env.WASABI_WEBHOOK_SECRET)
-                                    .update(req.rawBody)
-                                    .digest('hex');
-    console.log('Computed signature:', computedSignature);
-    console.log('Received signature:', signature);
-    
-    if (computedSignature !== signature) {
-      console.error('Signature verification failed.');
-      return res.status(403).send('Forbidden: Invalid signature.');
+   app.post('/webhook', express.json({
+    verify: (req, res, buf) => {
+      req.rawBody = buf.toString();
     }
-  } else {
-    console.log('No signature header found.');
-  }
-
-  // Process the webhook event here as needed
-
-  // Acknowledge receipt
-  res.status(200).send('Webhook received');
-});
+  }), (req, res) => {
+    // Immediately acknowledge the webhook to prevent retries
+    res.status(200).send('Webhook received');
+  
+    // Process the webhook asynchronously to avoid delaying the response
+    setImmediate(() => {
+      console.log('Webhook raw payload:', req.rawBody);
+      console.log('Webhook parsed payload:', req.body);
+  
+      // Check for a signature header if provided
+      const signature = req.headers['x-signature'];
+      if (signature) {
+        const computedSignature = crypto.createHmac('sha256', process.env.WASABI_WEBHOOK_SECRET)
+                                        .update(req.rawBody)
+                                        .digest('hex');
+        console.log('Computed signature:', computedSignature);
+        console.log('Received signature:', signature);
+  
+        if (computedSignature !== signature) {
+          console.error('Signature verification failed.');
+          // You can add additional handling or logging here
+          return;
+        }
+      } else {
+        console.warn('No signature header found.');
+      }
+  
+      // Process the webhook event further as needed
+      // ...
+    });
+  });
 
 // Nodemailer Configuration
 const transporter = nodemailer.createTransport({
@@ -1163,28 +1170,39 @@ app.post('/create-cardholder', async (req, res) => {
       }
     }
 
-    const payload = {
-      firstName: user.firstName,
-      lastName: user.lastName,
-      email: user.email,
-      areaCode: user.areaCode,
-      mobile: user.mobile,
-      birthday: user.birthday,
-      address: user.address,
-      town: user.town,
-      postCode: user.postCode,
-      country: user.country,
-      cardTypeId: 111016,
-      holderId: user.holderId ? user.holderId : '',
-    };
+    let holderId = user.holderId;
+    if (!holderId) {
+      // Create payload with an empty holderId if it doesn't exist
+      const payload = {
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        areaCode: user.areaCode,
+        mobile: user.mobile,
+        birthday: user.birthday,
+        address: user.address,
+        town: user.town,
+        postCode: user.postCode,
+        country: user.country,
+        cardTypeId: 111016,
+        holderId: ''  // Placeholder, will be filled by the Wasabi API
+      };
 
-    const wasabiResult = await callWasabiApi("/merchant/core/mcb/card/holder/create", payload);
-    console.log("WasabiCard API response:", wasabiResult);
+      // Call the Wasabi API to create a new cardholder
+      const wasabiResult = await callWasabiApi("/merchant/core/mcb/card/holder/create", payload);
+      console.log("WasabiCard API response:", wasabiResult);
 
-    const holderId = wasabiResult.data.holderId;
-    await collection.updateOne({ email: user.email }, { $set: { holderId } });
-    console.log(`Updated user ${email} with holderId: ${holderId}`);
+      // Retrieve the new holderId from the API response
+      holderId = wasabiResult.data.holderId;
 
+      // Update the user's record with the newly created holderId
+      await collection.updateOne({ email: user.email }, { $set: { holderId } });
+      console.log(`Created and updated user ${email} with holderId: ${holderId}`);
+    } else {
+      console.log(`User ${email} already has holderId: ${holderId}`);
+    }
+
+    // Call openCard using the holderId (existing or newly created)
     try {
       const openCardResponse = await openCard(holderId);
       console.log("Open Card API response:", openCardResponse);
@@ -1192,7 +1210,7 @@ app.post('/create-cardholder', async (req, res) => {
       console.error("Failed to open card for holderId", holderId, openError);
     }
 
-    res.json({ success: true, data: wasabiResult });
+    res.json({ success: true, holderId, message: "HolderId processed successfully" });
   } catch (error) {
     console.error("Error creating cardholder on WasabiCard API:", error);
     res.status(500).json({ success: false, message: error.message });
