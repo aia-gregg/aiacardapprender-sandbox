@@ -96,6 +96,17 @@ async function openCard(holderId, email, aiaCardId) {
   }
 }
 
+// Express endpoint to expose openCard function
+app.post('/openCard', async (req, res) => {
+  try {
+    const { holderId, email, aiaCardId } = req.body;
+    const result = await openCard(holderId, email, aiaCardId);
+    res.status(200).json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Secret key for JWT (store securely in production)
 const secretKey = "your_super_secret_key";
 
