@@ -36,8 +36,8 @@ function generateMerchantOrderNo(length = 22) {
   return result;
 }
 
-// Function to open a card using the WasabiCard API
-async function openCard(holderId) {
+// Function to open a card using the WasabiCard API and log orderNo to MongoDB
+async function openCard(holderId, email) {
   if (!holderId) {
     const errorMsg = 'Invalid holderId provided to openCard';
     console.error(errorMsg);
@@ -54,6 +54,33 @@ async function openCard(holderId) {
   try {
     const response = await callWasabiApi('/merchant/core/mcb/card/openCard', payload);
     console.log('Card opened successfully:', response);
+
+    // Assuming response.data is an array with at least one element containing orderNo
+    let orderNo = null;
+    if (response && response.data && Array.isArray(response.data) && response.data.length > 0) {
+      orderNo = response.data[0].orderNo;
+    }
+    
+    if (orderNo) {
+      // Log the orderNo into MongoDB so that the webhook can later lookup the record.
+      const database = client.db("aiacard-sandbox-db");
+      const collection = database.collection("aiacard-sandox-col");
+
+      // Update the user record with type 'create' matching the provided email
+      const updateResult = await collection.updateOne(
+        { email: email, type: 'create' },
+        { $set: { orderNo } }
+      );
+
+      if (updateResult.modifiedCount > 0) {
+        console.log(`User ${email} updated with orderNo: ${orderNo}`);
+      } else {
+        console.error(`Failed to update user ${email} with orderNo: ${orderNo}`);
+      }
+    } else {
+      console.error('No orderNo found in the Wasabi API response.');
+    }
+
     return response;
   } catch (error) {
     console.error('Error opening card:', error);
@@ -86,42 +113,90 @@ function generateOTP() {
   // }
   // 6-digit OTP
 
-   // Webhook endpoint for Wasabi API
-   app.post('/webhook', express.json({
-    verify: (req, res, buf) => {
-      req.rawBody = buf.toString();
-    }
-  }), (req, res) => {
-    // Immediately acknowledge the webhook to prevent retries
-    res.status(200).send('Webhook received');
-  
-    // Process the webhook asynchronously to avoid delaying the response
-    setImmediate(() => {
-      console.log('Webhook raw payload:', req.rawBody);
-      console.log('Webhook parsed payload:', req.body);
-  
-      // Check for a signature header if provided
-      const signature = req.headers['x-signature'];
-      if (signature) {
-        const computedSignature = crypto.createHmac('sha256', process.env.WASABI_WEBHOOK_SECRET)
-                                        .update(req.rawBody)
-                                        .digest('hex');
-        console.log('Computed signature:', computedSignature);
-        console.log('Received signature:', signature);
-  
-        if (computedSignature !== signature) {
-          console.error('Signature verification failed.');
-          // You can add additional handling or logging here
-          return;
-        }
-      } else {
-        console.warn('No signature header found.');
-      }
-  
-      // Process the webhook event further as needed
-      // ...
-    });
+// Webhook endpoint for Wasabi API
+app.post('/webhook', express.json({
+  verify: (req, res, buf) => {
+    req.rawBody = buf.toString();
+  }
+}), (req, res) => {
+  // Immediately acknowledge with the expected JSON response
+  res.status(200).json({
+    success: true,
+    code: 200,
+    msg: "Success",
+    data: null
   });
+
+  // Process the webhook asynchronously so as not to delay the response
+  setImmediate(async () => {
+    console.log('Webhook raw payload:', req.rawBody);
+    console.log('Webhook parsed payload:', req.body);
+
+    // Check for a signature header if provided
+    const signature = req.headers['x-signature'];
+    if (signature) {
+      const computedSignature = crypto.createHmac('sha256', process.env.WASABI_WEBHOOK_SECRET)
+                                      .update(req.rawBody)
+                                      .digest('hex');
+      console.log('Computed signature:', computedSignature);
+      console.log('Received signature:', signature);
+      if (computedSignature !== signature) {
+        console.error('Signature verification failed.');
+        return;
+      }
+    } else {
+      console.warn('No signature header found.');
+    }
+
+    // Extract key parameters from the webhook payload
+    const { orderNo, cardNo, type } = req.body;
+    if (!orderNo || !cardNo) {
+      console.error('Missing orderNo or cardNo in webhook payload.');
+      return;
+    }
+    // Only process webhook if type is 'create'
+    if (type !== 'create') {
+      console.log(`Webhook type is ${type} (expected 'create'). Skipping processing.`);
+      return;
+    }
+
+    try {
+      const database = client.db("aiacard-sandbox-db");
+      const collection = database.collection("aiacard-sandox-col");
+
+      // Lookup the user by orderNo and type 'create'
+      // This ensures that only card orders (and not deposits) are processed.
+      const user = await collection.findOne({ orderNo: orderNo, type: 'create' });
+      if (!user) {
+        console.error(`No user found with orderNo: ${orderNo} and type 'create'`);
+        return;
+      }
+
+      // Determine the current number of active cards (default to 0 if not set)
+      const activeCards = user.activeCards || 0;
+      const newCardIndex = activeCards + 1;
+      // Create a new field name, for example "cardNo1", "cardNo2", etc.
+      const cardFieldName = `cardNo${newCardIndex}`;
+
+      // Update the user record: add the new cardNo field and increment activeCards
+      const updateResult = await collection.updateOne(
+        { _id: user._id },
+        { 
+          $set: { [cardFieldName]: cardNo },
+          $inc: { activeCards: 1 }
+        }
+      );
+
+      if (updateResult.modifiedCount > 0) {
+        console.log(`User ${user.email} updated: ${cardFieldName} set to ${cardNo}. Active cards now: ${newCardIndex}`);
+      } else {
+        console.error('Failed to update user record with new card information.');
+      }
+    } catch (dbError) {
+      console.error('Error updating MongoDB with card details:', dbError);
+    }
+  });
+});
 
 // Nodemailer Configuration
 const transporter = nodemailer.createTransport({
@@ -234,7 +309,7 @@ app.post('/login', async (req, res) => {
       return res.status(401).json({ success: false, message: "Invalid username or password." });
     }
 
-    console.log("Stored password:", user.password, "Provided password:", password);
+    // console.log("Stored password:", user.password, "Provided password:", password);
 
     if (!user.password) {
       return res.status(500).json({ success: false, message: "User password is missing from the database." });
@@ -1117,8 +1192,8 @@ app.post('/create-zendesk-ticket', async (req, res) => {
 
 
 // Ping Endpoint
-app.get('/ping', (req, res) => {
-  res.status(200).json({ message: 'pong' });
+app.get('/', (req, res) => {
+  res.status(200).send('Server is up and running');
 });
 
 // Stripe Integration Endpoint
