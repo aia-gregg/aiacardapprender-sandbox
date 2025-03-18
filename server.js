@@ -79,8 +79,7 @@ function generateOTP() {
   // }
   // 6-digit OTP
 
-
-  // Webhook endpoint for Wasabi API
+   // Webhook endpoint for Wasabi API
 // Use express.json with a custom verify function to capture the raw body for signature verification
 app.post('/webhook', express.json({
   verify: (req, res, buf) => {
@@ -1176,6 +1175,7 @@ app.post('/create-cardholder', async (req, res) => {
       postCode: user.postCode,
       country: user.country,
       cardTypeId: 111016,
+      holderId: user.holderId ? user.holderId : '',
     };
 
     const wasabiResult = await callWasabiApi("/merchant/core/mcb/card/holder/create", payload);
