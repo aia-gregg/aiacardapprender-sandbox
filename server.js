@@ -120,12 +120,16 @@ app.post('/webhook', express.json({
   }
 }), (req, res) => {
   // Immediately acknowledge with the expected JSON response
-  res.status(200).json({
+  const responsePayload = {
     success: true,
     code: 200,
     msg: "Success",
     data: null
-  });
+  };
+  res.status(200).json(responsePayload);
+
+  // Console log to indicate immediate acknowledgement
+  console.log('Webhook immediately acknowledged with response:', responsePayload);
 
   // Process the webhook asynchronously so as not to delay the response
   setImmediate(async () => {
