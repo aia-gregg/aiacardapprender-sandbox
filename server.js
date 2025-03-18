@@ -1162,31 +1162,51 @@ app.post('/create-cardholder', async (req, res) => {
   }
 });
 
-// Card Details API from Wasabi
-// Card Info Endpoint from Wasabi
-app.post('/card-info', async (req, res) => {
+// Card Details Endpoint – retrieves card info (with CVV fetched dynamically)
+app.post('/card-details', async (req, res) => {
   try {
-    // Validate that cardNo is provided
-    const { cardNo, onlySimpleInfo = false } = req.body;
-    if (!cardNo) {
-      return res.status(400).json({ success: false, message: "cardNo is required" });
+    // Validate that the email is provided in the request body
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ success: false, message: "Email is required" });
     }
 
-    // Build the payload as expected by Wasabi's API.
+    // Connect to MongoDB and find the user record by email
+    const database = client.db("aiacard-sandbox-db");
+    const collection = database.collection("aiacard-sandox-col");
+    const user = await collection.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    // Ensure that the user has card information stored – only cardNumber and expiry date should be stored.
+    if (!user.cardNumber || !user.holderId) {
+      return res.status(400).json({ success: false, message: "Card information not available for this user." });
+    }
+
+    // Build the payload to call Wasabi's Card Info API.
+    // The documentation states that the Card Info API requires a cardNo and an optional onlySimpleInfo flag.
+    // We use the cardNumber stored in MongoDB.
     const payload = {
-      cardNo,
-      onlySimpleInfo, // Set to false to get full details including balance info
+      cardNo: user.cardNumber,
+      onlySimpleInfo: false, // set false to get full details including CVV
     };
 
-    // Forward the request to Wasabi's API endpoint using your helper function.
-    // The documented endpoint is '/merchant/core/mcb/card/info'
+    // Call Wasabi's API using your helper function.
+    // Note: The documented endpoint is '/merchant/core/mcb/card/info'
     const wasabiResponse = await callWasabiApi('/merchant/core/mcb/card/info', payload);
     console.log("WasabiCard API card info response:", wasabiResponse);
 
-    // Return the Wasabi response back to the client.
+    // Optionally, you could merge the stored expiry date (if needed) with the response.
+    // For example, if wasabiResponse.data does not include the expiry date, you might add it:
+    if (wasabiResponse.success && wasabiResponse.data) {
+      wasabiResponse.data.expiryDate = user.expiryDate; // assuming you stored expiry date as 'expiryDate'
+    }
+
+    // Return the response from Wasabi to the client.
     res.json(wasabiResponse);
   } catch (error) {
-    console.error("Error fetching card info:", error);
+    console.error("Error fetching card details:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
