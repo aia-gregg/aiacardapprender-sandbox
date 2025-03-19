@@ -265,10 +265,11 @@ app.post('/get-active-cards', async (req, res) => {
     
     for (let i = 1; i <= activeCardsCount; i++) {
       const cardNoField = `cardNo${i}`;
-      const cardTypeField = `cardNo${i}AIAId`; // Stored aiaCardId for this card
+      // Update this field name to exactly match what's stored in MongoDB
+      const cardTypeField = `cardNo${i}aiaId`; // e.g. "cardNo1aiaId"
       
       const cardNo = user[cardNoField];
-      const aiaCardId = user[cardTypeField];
+      const aiaCardId = user[cardTypeField];  // This value should be 'lite', 'pro', or 'elite'
       if (!cardNo) continue; // Skip if no card number stored
       
       // Prepare payload for the Wasabi Card Info API call
@@ -303,9 +304,9 @@ app.post('/get-active-cards', async (req, res) => {
         // Extract balance from balanceInfo.amount
         const balance = data.balanceInfo?.amount || null;
 
-        // Build a card detail object
+        // Build a card detail object, merging the MongoDB field (aiaCardId) with the Wasabi data.
         const cardDetail = {
-          aiaCardId,               // e.g., 'lite', 'pro', or 'elite'
+          aiaCardId,               // e.g., 'lite', 'pro', or 'elite' from MongoDB
           cardNo: data.cardNo,       // Bank Card ID from Wasabi
           maskedCardNumber,         // e.g., "**** 2595"
           expiry,                   // Decrypted expiry or "N/A"
