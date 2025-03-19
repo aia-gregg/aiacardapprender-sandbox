@@ -359,7 +359,7 @@ app.post('/merchant/core/mcb/card/freeze', (req, res) => {
 
 // Unfreeze endpoint
 app.post('/merchant/core/mcb/card/unfreeze', (req, res) => {
-  const { cardNo, maskedCardNumber } = req.body;
+  const { maskedCardNumber } = req.body;
   
   if (!cardNo) {
     return res.status(400).json({
@@ -370,7 +370,7 @@ app.post('/merchant/core/mcb/card/unfreeze', (req, res) => {
   }
   
   // Log the cardNo and maskedCardNumber
-  console.log(`Unfreezing card: cardNo = ${cardNo}, maskedCardNumber = ${maskedCardNumber || 'N/A'}`);
+  console.log(`Unfreezing card: maskedCardNumber = ${maskedCardNumber || 'N/A'}`);
   
   // Example response after a successful unfreeze operation
   res.json({
