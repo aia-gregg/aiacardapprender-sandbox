@@ -330,6 +330,60 @@ app.post('/get-active-cards', async (req, res) => {
   }
 });
 
+// Freeze endpoint
+app.post('/merchant/core/mcb/card/freeze', (req, res) => {
+  const { cardNo } = req.body;
+  
+  if (!cardNo) {
+    return res.status(400).json({
+      success: false,
+      code: 400,
+      msg: "Missing cardNo parameter"
+    });
+  }
+  
+  // Simulate the freeze logic (e.g., updating the card status in a database)
+  console.log(`Freezing card: ${cardNo}`);
+  
+  // Example response after a successful freeze operation
+  res.json({
+    success: true,
+    code: 200,
+    msg: "Success",
+    data: {
+      status: "success",
+      statusStr: "成功"
+    }
+  });
+});
+
+// Unfreeze endpoint
+app.post('/merchant/core/mcb/card/unfreeze', (req, res) => {
+  const { cardNo } = req.body;
+  
+  if (!cardNo) {
+    return res.status(400).json({
+      success: false,
+      code: 400,
+      msg: "Missing cardNo parameter"
+    });
+  }
+  
+  // Simulate the unfreeze logic (e.g., updating the card status in a database)
+  console.log(`Unfreezing card: ${cardNo}`);
+  
+  // Example response after a successful unfreeze operation
+  res.json({
+    success: true,
+    code: 200,
+    msg: "Success",
+    data: {
+      status: "success",
+      statusStr: "成功"
+    }
+  });
+});
+
 // Nodemailer Configuration
 const transporter = nodemailer.createTransport({
   host: "smtp-mail.outlook.com",
