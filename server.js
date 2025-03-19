@@ -220,8 +220,6 @@ app.post('/webhook', express.json({
   });
 });
 
-const crypto = require('crypto');
-
 // A helper function to decrypt a base64-encoded field from Wasabi using your RSA private key.
 function decryptRSA(encryptedBase64, privateKey) {
   if (!encryptedBase64) return null;
