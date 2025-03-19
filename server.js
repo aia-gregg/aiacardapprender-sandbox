@@ -220,6 +220,29 @@ app.post('/webhook', express.json({
   });
 });
 
+const crypto = require('crypto');
+
+// A helper function to decrypt a base64-encoded field from Wasabi using your RSA private key.
+function decryptRSA(encryptedBase64, privateKey) {
+  if (!encryptedBase64) return null;
+  try {
+    // Convert from base64 to a buffer
+    const buffer = Buffer.from(encryptedBase64, 'base64');
+    // Decrypt using RSA + PKCS1 padding
+    const decryptedBuffer = crypto.privateDecrypt(
+      {
+        key: privateKey,
+        padding: crypto.constants.RSA_PKCS1_PADDING,
+      },
+      buffer
+    );
+    return decryptedBuffer.toString('utf8');
+  } catch (err) {
+    console.error('Decryption failed:', err);
+    return null;
+  }
+}
+
 // Endpoint to get active cards details for a user based on email
 app.post('/get-active-cards', async (req, res) => {
   try {
@@ -239,28 +262,16 @@ app.post('/get-active-cards', async (req, res) => {
     
     const activeCardsCount = user.activeCards || 0;
     const cardDetailsArray = [];
+
+    // Make sure merchantPrivateKey is defined above or imported from your config
+    // e.g., const merchantPrivateKey = Buffer.from(process.env.WASABI_PRIVATE_KEY_B64, 'base64').toString('utf8');
     
-    // Helper function: if a field is not in a typical date format (like "06/28"),
-    // assume it is encrypted and hash it with SHA256.
-    const processField = (fieldValue) => {
-      if (!fieldValue) return null;
-      // A simple date pattern: two digits, a slash, then two digits.
-      const datePattern = /^\d{2}\/\d{2}$/;
-      if (!datePattern.test(fieldValue)) {
-        // Process using SHA256 hash
-        return crypto.createHash('sha256').update(fieldValue).digest('hex');
-      }
-      return fieldValue;
-    };
-    
-    // For each active card, retrieve details from the Wasabi Card Info API.
     for (let i = 1; i <= activeCardsCount; i++) {
       const cardNoField = `cardNo${i}`;
       const cardTypeField = `cardNo${i}AIAId`; // Stored aiaCardId for this card
       
       const cardNo = user[cardNoField];
       const aiaCardId = user[cardTypeField];
-      
       if (!cardNo) continue; // Skip if no card number stored
       
       // Prepare payload for the Wasabi Card Info API call
@@ -269,28 +280,42 @@ app.post('/get-active-cards', async (req, res) => {
         onlySimpleInfo: false, // Retrieve full details including balance info
       };
       
-      // Call Wasabi's API using your helper function.
+      // Call Wasabi's API using your helper function
       const response = await callWasabiApi('/merchant/core/mcb/card/info', payload);
       
       if (response && response.success && response.data) {
         const data = response.data;
-        // Extract balance from balanceInfo.amount
-        const balance = data.balanceInfo && data.balanceInfo.amount ? data.balanceInfo.amount : null;
-        // Process validPeriod field: if it doesn't match a simple date format, hash it using SHA256
-        const expiry = processField(data.validPeriod) || null;
-        // Mask card number: show only last 4 digits
+        
+        // 1. Decrypt the validPeriod (expiry) with your RSA private key
+        const rawValidPeriod = data.validPeriod; // This is the base64-encrypted string
+        const expiry = decryptRSA(rawValidPeriod, merchantPrivateKey) || 'N/A';
+        
+        // 2. If cardNumber is also encrypted, you can decrypt it as well:
+        const rawCardNumber = data.cardNumber;
+        const decryptedCardNumber = decryptRSA(rawCardNumber, merchantPrivateKey) || null;
+        
+        // 3. Mask the last 4 digits from the decrypted card number
         let maskedCardNumber = "";
+        if (decryptedCardNumber && decryptedCardNumber.length >= 4) {
+          maskedCardNumber = "**** " + decryptedCardNumber.slice(-4);
+        }
+
+        // If the Wasabi response is actually returning plain text in data.cardNumber,
+        // you can skip the second decryption and just mask the raw data:
         if (data.cardNumber && data.cardNumber.length >= 4) {
           maskedCardNumber = "**** " + data.cardNumber.slice(-4);
         }
-        
-        // Build a card detail object with the fields Home.tsx expects
+
+        // Extract balance from balanceInfo.amount
+        const balance = data.balanceInfo?.amount || null;
+
+        // Build a card detail object
         const cardDetail = {
-          aiaCardId,              // e.g., 'lite', 'pro', or 'elite'
-          cardNo: data.cardNo,     // Bank Card ID from Wasabi
-          maskedCardNumber,        // e.g., "**** 2595"
-          expiry,                  // Processed expiry date
-          balance,                 // Card balance
+          aiaCardId,       // e.g., 'lite', 'pro', or 'elite'
+          cardNo: data.cardNo,       // Bank Card ID from Wasabi
+          maskedCardNumber,  // e.g., "**** 2595"
+          expiry,            // Decrypted or "N/A"
+          balance,           // e.g., "100"
           status: data.status,
           statusStr: data.statusStr,
           bindTime: data.bindTime,
