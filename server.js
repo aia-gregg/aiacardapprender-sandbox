@@ -224,13 +224,12 @@ app.post('/webhook', express.json({
 function decryptRSA(encryptedBase64, privateKey) {
   if (!encryptedBase64) return null;
   try {
-    // Convert from base64 to a buffer
     const buffer = Buffer.from(encryptedBase64, 'base64');
-    // Decrypt using RSA with OAEP padding
+    // Use RSA_PKCS1_PADDING as required (and run Node with --openssl-legacy-provider if needed)
     const decryptedBuffer = crypto.privateDecrypt(
       {
         key: privateKey,
-        padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+        padding: crypto.constants.RSA_PKCS1_PADDING,
       },
       buffer
     );
