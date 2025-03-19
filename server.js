@@ -241,6 +241,8 @@ function decryptRSA(encryptedBase64, privateKey) {
   }
 }
 
+const { merchantPrivateKey } = require('./config');  // adjust path as necessary
+
 // Endpoint to get active cards details for a user based on email
 app.post('/get-active-cards', async (req, res) => {
   try {
