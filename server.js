@@ -7,7 +7,7 @@ const { MongoClient, ServerApiVersion } = require('mongodb');
 const crypto = require('crypto');
 const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
 const stripe = require('stripe')('sk_test_51Qy1IkDO1xHmcck34QjJM47p4jkKFGViTuIVlbY1njZqObWxc9hWMvrWCsiSVgCRd08Xx1fyfXYG90Hxw6yl84WO00Xt3GGTjU'); // Test secret key
-const { callWasabiApi } = require('./wasabiApi');
+const { merchantPrivateKey, callWasabiApi } = require('./wasabiApi');
 
 // MongoDB Connection
 const uri = "mongodb+srv://faz:p6dH6vkUBrcGy4Ed@aiacard-sandbox.a03vg.mongodb.net/?retryWrites=true&w=majority&appName=aiacard-sandbox";
@@ -240,8 +240,6 @@ function decryptRSA(encryptedBase64, privateKey) {
     return null;
   }
 }
-
-const { merchantPrivateKey } = require('./config');  // adjust path as necessary
 
 // Endpoint to get active cards details for a user based on email
 app.post('/get-active-cards', async (req, res) => {
