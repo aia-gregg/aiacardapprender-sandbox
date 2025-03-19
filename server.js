@@ -332,7 +332,7 @@ app.post('/get-active-cards', async (req, res) => {
 
 // Freeze endpoint
 app.post('/merchant/core/mcb/card/freeze', (req, res) => {
-  const { cardNo } = req.body;
+  const { cardNo, maskedCardNumber } = req.body;
   
   if (!cardNo) {
     return res.status(400).json({
@@ -342,8 +342,8 @@ app.post('/merchant/core/mcb/card/freeze', (req, res) => {
     });
   }
   
-  // Simulate the freeze logic (e.g., updating the card status in a database)
-  console.log(`Freezing card: ${cardNo}`);
+  // Log the cardNo and maskedCardNumber
+  console.log(`Freezing card: cardNo = ${cardNo}, maskedCardNumber = ${maskedCardNumber || 'N/A'}`);
   
   // Example response after a successful freeze operation
   res.json({
@@ -359,7 +359,7 @@ app.post('/merchant/core/mcb/card/freeze', (req, res) => {
 
 // Unfreeze endpoint
 app.post('/merchant/core/mcb/card/unfreeze', (req, res) => {
-  const { cardNo } = req.body;
+  const { cardNo, maskedCardNumber } = req.body;
   
   if (!cardNo) {
     return res.status(400).json({
@@ -369,8 +369,8 @@ app.post('/merchant/core/mcb/card/unfreeze', (req, res) => {
     });
   }
   
-  // Simulate the unfreeze logic (e.g., updating the card status in a database)
-  console.log(`Unfreezing card: ${cardNo}`);
+  // Log the cardNo and maskedCardNumber
+  console.log(`Unfreezing card: cardNo = ${cardNo}, maskedCardNumber = ${maskedCardNumber || 'N/A'}`);
   
   // Example response after a successful unfreeze operation
   res.json({
@@ -383,6 +383,7 @@ app.post('/merchant/core/mcb/card/unfreeze', (req, res) => {
     }
   });
 });
+
 
 // Nodemailer Configuration
 const transporter = nodemailer.createTransport({
