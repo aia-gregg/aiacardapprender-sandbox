@@ -260,8 +260,8 @@ app.post('/get-active-cards', async (req, res) => {
     const activeCardsCount = user.activeCards || 0;
     const cardDetailsArray = [];
 
-    // Make sure merchantPrivateKey is defined above or imported from your config
-    // e.g., const merchantPrivateKey = Buffer.from(process.env.WASABI_PRIVATE_KEY_B64, 'base64').toString('utf8');
+    // Make sure merchantPrivateKey is defined/imported (from wasabiApi.js, for example)
+    // e.g., const { merchantPrivateKey } = require('./wasabiApi');
     
     for (let i = 1; i <= activeCardsCount; i++) {
       const cardNoField = `cardNo${i}`;
@@ -279,6 +279,8 @@ app.post('/get-active-cards', async (req, res) => {
       
       // Call Wasabi's API using your helper function
       const response = await callWasabiApi('/merchant/core/mcb/card/info', payload);
+      // Log the raw response from Wasabi API for debugging
+      console.log('Raw response from Wasabi API for cardNo:', cardNo, response);
       
       if (response && response.success && response.data) {
         const data = response.data;
@@ -287,32 +289,27 @@ app.post('/get-active-cards', async (req, res) => {
         const rawValidPeriod = data.validPeriod; // This is the base64-encrypted string
         const expiry = decryptRSA(rawValidPeriod, merchantPrivateKey) || 'N/A';
         
-        // 2. If cardNumber is also encrypted, you can decrypt it as well:
+        // 2. Decrypt cardNumber if necessary; otherwise, use raw and mask it.
         const rawCardNumber = data.cardNumber;
-        const decryptedCardNumber = decryptRSA(rawCardNumber, merchantPrivateKey) || null;
-        
-        // 3. Mask the last 4 digits from the decrypted card number
         let maskedCardNumber = "";
+        // Try to decrypt; if decryption fails, fall back to masking the raw value
+        const decryptedCardNumber = decryptRSA(rawCardNumber, merchantPrivateKey);
         if (decryptedCardNumber && decryptedCardNumber.length >= 4) {
           maskedCardNumber = "**** " + decryptedCardNumber.slice(-4);
-        }
-
-        // If the Wasabi response is actually returning plain text in data.cardNumber,
-        // you can skip the second decryption and just mask the raw data:
-        if (data.cardNumber && data.cardNumber.length >= 4) {
+        } else if (data.cardNumber && data.cardNumber.length >= 4) {
           maskedCardNumber = "**** " + data.cardNumber.slice(-4);
         }
-
+        
         // Extract balance from balanceInfo.amount
         const balance = data.balanceInfo?.amount || null;
 
         // Build a card detail object
         const cardDetail = {
-          aiaCardId,       // e.g., 'lite', 'pro', or 'elite'
+          aiaCardId,               // e.g., 'lite', 'pro', or 'elite'
           cardNo: data.cardNo,       // Bank Card ID from Wasabi
-          maskedCardNumber,  // e.g., "**** 2595"
-          expiry,            // Decrypted or "N/A"
-          balance,           // e.g., "100"
+          maskedCardNumber,         // e.g., "**** 2595"
+          expiry,                   // Decrypted expiry or "N/A"
+          balance,                  // Card balance
           status: data.status,
           statusStr: data.statusStr,
           bindTime: data.bindTime,
