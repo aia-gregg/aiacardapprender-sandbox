@@ -220,25 +220,25 @@ app.post('/webhook', express.json({
   });
 });
 
-// // A helper function to decrypt a base64-encoded field from Wasabi using your RSA private key.
-// function decryptRSA(encryptedBase64, privateKey) {
-//   if (!encryptedBase64) return null;
-//   try {
-//     const buffer = Buffer.from(encryptedBase64, 'base64');
-//     // Use RSA_PKCS1_PADDING as required (and run Node with --openssl-legacy-provider if needed)
-//     const decryptedBuffer = crypto.privateDecrypt(
-//       {
-//         key: privateKey,
-//         padding: crypto.constants.RSA_PKCS1_PADDING,
-//       },
-//       buffer
-//     );
-//     return decryptedBuffer.toString('utf8');
-//   } catch (err) {
-//     console.error('Decryption failed:', err);
-//     return null;
-//   }
-// }
+// A helper function to decrypt a base64-encoded field from Wasabi using your RSA private key.
+function decryptRSA(encryptedBase64, privateKey) {
+  if (!encryptedBase64) return null;
+  try {
+    const buffer = Buffer.from(encryptedBase64, 'base64');
+    // Use RSA_PKCS1_PADDING as required (and run Node with --openssl-legacy-provider if needed)
+    const decryptedBuffer = crypto.privateDecrypt(
+      {
+        key: privateKey,
+        padding: crypto.constants.RSA_PKCS1_PADDING,
+      },
+      buffer
+    );
+    return decryptedBuffer.toString('utf8');
+  } catch (err) {
+    console.error('Decryption failed:', err);
+    return null;
+  }
+}
 
 // Endpoint to get active cards details for a user based on email
 app.post('/get-active-cards', async (req, res) => {
