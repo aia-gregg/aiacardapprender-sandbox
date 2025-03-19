@@ -240,6 +240,19 @@ app.post('/get-active-cards', async (req, res) => {
     const activeCardsCount = user.activeCards || 0;
     const cardDetailsArray = [];
     
+    // Helper function: if a field is not in a typical date format (like "06/28"),
+    // assume it is encrypted and hash it with SHA256.
+    const processField = (fieldValue) => {
+      if (!fieldValue) return null;
+      // A simple date pattern: two digits, a slash, then two digits.
+      const datePattern = /^\d{2}\/\d{2}$/;
+      if (!datePattern.test(fieldValue)) {
+        // Process using SHA256 hash
+        return crypto.createHash('sha256').update(fieldValue).digest('hex');
+      }
+      return fieldValue;
+    };
+    
     // For each active card, retrieve details from the Wasabi Card Info API.
     for (let i = 1; i <= activeCardsCount; i++) {
       const cardNoField = `cardNo${i}`;
@@ -256,33 +269,32 @@ app.post('/get-active-cards', async (req, res) => {
         onlySimpleInfo: false, // Retrieve full details including balance info
       };
       
-      // Call Wasabi's API using your helper function
+      // Call Wasabi's API using your helper function.
       const response = await callWasabiApi('/merchant/core/mcb/card/info', payload);
       
       if (response && response.success && response.data) {
         const data = response.data;
         // Extract balance from balanceInfo.amount
         const balance = data.balanceInfo && data.balanceInfo.amount ? data.balanceInfo.amount : null;
-        // Use validPeriod as expiry (adjust if you need to transform the value)
-        const expiry = data.validPeriod || null;
+        // Process validPeriod field: if it doesn't match a simple date format, hash it using SHA256
+        const expiry = processField(data.validPeriod) || null;
         // Mask card number: show only last 4 digits
         let maskedCardNumber = "";
         if (data.cardNumber && data.cardNumber.length >= 4) {
           maskedCardNumber = "**** " + data.cardNumber.slice(-4);
         }
         
-        // Build a card detail object
+        // Build a card detail object with the fields Home.tsx expects
         const cardDetail = {
-          aiaCardId,       // e.g., 'lite', 'pro', or 'elite'
-          cardNo: data.cardNo,       // Bank Card ID
-          maskedCardNumber,  // e.g., "**** 2595"
-          expiry,
-          balance,
+          aiaCardId,              // e.g., 'lite', 'pro', or 'elite'
+          cardNo: data.cardNo,     // Bank Card ID from Wasabi
+          maskedCardNumber,        // e.g., "**** 2595"
+          expiry,                  // Processed expiry date
+          balance,                 // Card balance
           status: data.status,
           statusStr: data.statusStr,
           bindTime: data.bindTime,
           remark: data.remark,
-          // Include any other fields you need from the response
         };
         
         cardDetailsArray.push(cardDetail);
