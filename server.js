@@ -91,7 +91,7 @@ async function openCard(holderId, email, aiaCardId) {
       const user = await collection.findOne({ holderId: holderId });
       const activeCards = user && user.activeCards ? user.activeCards : 0;
       const newCardIndex = activeCards + 1;
-      const cardAIAField = `cardNo${newCardIndex}AIAId`; // e.g., cardNo1AIAId
+      const cardAIAField = `cardNo${newCardIndex}aiaId`; // e.g., cardNo1aiaId
 
       // Update the user record by lookup using the provided holderId:
       // set the orderNo and the new cardAIAField, and increment activeCards.
@@ -218,6 +218,84 @@ app.post('/webhook', express.json({
       console.error('Error updating MongoDB with card details:', dbError);
     }
   });
+});
+
+// Endpoint to get active cards details for a user based on email
+app.post('/get-active-cards', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ success: false, message: "Email is required" });
+    }
+    
+    const database = client.db("aiacard-sandbox-db");
+    const collection = database.collection("aiacard-sandox-col");
+    
+    // Lookup user document by email
+    const user = await collection.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+    
+    const activeCardsCount = user.activeCards || 0;
+    const cardDetailsArray = [];
+    
+    // For each active card, retrieve details from the Wasabi Card Info API.
+    for (let i = 1; i <= activeCardsCount; i++) {
+      const cardNoField = `cardNo${i}`;
+      const cardTypeField = `cardNo${i}AIAId`; // Stored aiaCardId for this card
+      
+      const cardNo = user[cardNoField];
+      const aiaCardId = user[cardTypeField];
+      
+      if (!cardNo) continue; // Skip if no card number stored
+      
+      // Prepare payload for the Wasabi Card Info API call
+      const payload = {
+        cardNo: cardNo,
+        onlySimpleInfo: false, // Retrieve full details including balance info
+      };
+      
+      // Call Wasabi's API using your helper function
+      const response = await callWasabiApi('/merchant/core/mcb/card/info', payload);
+      
+      if (response && response.success && response.data) {
+        const data = response.data;
+        // Extract balance from balanceInfo.amount
+        const balance = data.balanceInfo && data.balanceInfo.amount ? data.balanceInfo.amount : null;
+        // Use validPeriod as expiry (adjust if you need to transform the value)
+        const expiry = data.validPeriod || null;
+        // Mask card number: show only last 4 digits
+        let maskedCardNumber = "";
+        if (data.cardNumber && data.cardNumber.length >= 4) {
+          maskedCardNumber = "**** " + data.cardNumber.slice(-4);
+        }
+        
+        // Build a card detail object
+        const cardDetail = {
+          aiaCardId,       // e.g., 'lite', 'pro', or 'elite'
+          cardNo: data.cardNo,       // Bank Card ID
+          maskedCardNumber,  // e.g., "**** 2595"
+          expiry,
+          balance,
+          status: data.status,
+          statusStr: data.statusStr,
+          bindTime: data.bindTime,
+          remark: data.remark,
+          // Include any other fields you need from the response
+        };
+        
+        cardDetailsArray.push(cardDetail);
+      } else {
+        console.error(`Failed to retrieve card info for cardNo: ${cardNo}`);
+      }
+    }
+    
+    return res.status(200).json({ success: true, data: cardDetailsArray });
+  } catch (error) {
+    console.error("Error in /get-active-cards:", error);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
 });
 
 // Nodemailer Configuration
