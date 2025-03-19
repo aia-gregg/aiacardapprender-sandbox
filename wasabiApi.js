@@ -41,4 +41,4 @@ async function callWasabiApi(endpoint, payloadObj) {
   return response.json();
 }
 
-module.exports = { callWasabiApi };
+module.exports = { merchantPrivateKey, callWasabiApi };

@@ -10,6 +10,7 @@ const crypto = require('crypto');
 const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const { callWasabiApi } = require('./wasabiApi');
+const fireblocks = require('./fireblocks');
 
 // MongoDB Connection URI (set via environment variable on Render)
 const uri = process.env.MONGODB_URI;
@@ -335,6 +336,7 @@ app.post('/forgot-password-otp', async (req, res) => {
     }
   });
   
+  
   // Verify Forgot Password OTP Endpoint
   app.post('/verify-forgot-password-otp', async (req, res) => {
     try {
@@ -358,6 +360,71 @@ app.post('/forgot-password-otp', async (req, res) => {
       res.status(500).json({ success: false, message: "Server error" });
     }
   });
+
+  // NEW: Endpoint to send OTP for Card Details Verification
+app.post('/send-card-details-otp', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ success: false, message: "Email is required." });
+    }
+    const database = client.db("aiacard-sandbox-db");
+    const collection = database.collection("aiacard-sandox-col");
+    const user = await collection.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found." });
+    }
+    // Generate OTP for card details and set expiry to 10 minutes from now
+    const otp = generateOTP();
+    const otpExpiry = new Date(Date.now() + 10 * 60000);
+    
+    // Save the OTP and expiry on the user document (using new fields)
+    await collection.updateOne({ email }, { 
+      $set: { cardDetailsOtp: otp, cardDetailsOtpExpiry: otpExpiry } 
+    });
+    console.log(`🔑 Generated Card Details OTP for ${email}: ${otp}`);
+
+    // Send the OTP via email using your configured transporter
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: "Your Card Details OTP Code",
+      text: `Your OTP for card details verification is: ${otp}. It is valid for 10 minutes.`
+    });
+
+    res.status(200).json({ success: true, message: "OTP sent for card details verification." });
+  } catch (error) {
+    console.error("❌ Error sending Card Details OTP:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
+// NEW: Endpoint to verify OTP for Card Details Verification
+app.post('/verify-card-details-otp', async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp) {
+      return res.status(400).json({ success: false, message: "Email and OTP are required." });
+    }
+    const database = client.db("aiacard-sandbox-db");
+    const collection = database.collection("aiacard-sandox-col");
+    const user = await collection.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found." });
+    }
+    // Verify that the provided OTP matches and has not expired
+    if (user.cardDetailsOtp !== otp || new Date(user.cardDetailsOtpExpiry) < new Date()) {
+      return res.status(400).json({ success: false, message: "Invalid or expired OTP. Please try again." });
+    }
+    // OTP is valid; clear the OTP fields
+    await collection.updateOne({ email }, { $unset: { cardDetailsOtp: "", cardDetailsOtpExpiry: "" } });
+    console.log(`✅ Card Details OTP verified for ${email}.`);
+    res.status(200).json({ success: true, message: "OTP verified successfully." });
+  } catch (error) {
+    console.error("❌ Error verifying Card Details OTP:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
   
   // Add this new endpoint at an appropriate place in your server.js file
   
@@ -500,6 +567,18 @@ app.post('/create-cardholder', async (req, res) => {
     res.json({ success: true, data: wasabiResult });
   } catch (error) {
     console.error("Error creating cardholder on WasabiCard API:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.post('/create-vault-account', async (req, res) => {
+  try {
+    // Your payload is defined in the request body
+    const payload = req.body;
+    const result = await fireblocks.callFireblocksApi("POST", "/vault/accounts", payload);
+    res.json({ success: true, data: result });
+  } catch (error) {
+    console.error('Error calling Fireblocks API:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
