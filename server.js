@@ -343,19 +343,20 @@ app.post('/merchant/core/mcb/card/freeze', (req, res) => {
     });
   }
   
-  // Log the cardNo and maskedCardNumber
+  // Log the full payload for debugging
+  console.log("Received freeze request payload:", req.body);
   console.log(`Freezing card: cardNo = ${cardNo}, maskedCardNumber = ${maskedCardNumber || 'N/A'}`);
   
-  // Example response after a successful freeze operation
-  res.json({
-    success: true,
-    code: 200,
-    msg: "Success",
-    data: {
-      status: "success",
-      statusStr: "成功"
-    }
-  });
+  // // Example response after a successful freeze operation
+  // res.json({
+  //   success: true,
+  //   code: 200,
+  //   msg: "Success",
+  //   data: {
+  //     status: "success",
+  //     statusStr: "成功"
+  //   }
+  // });
 });
 
 // Unfreeze endpoint
@@ -370,19 +371,20 @@ app.post('/merchant/core/mcb/card/unfreeze', (req, res) => {
     });
   }
   
-  // Log the cardNo and maskedCardNumber
+  // Log the full payload for debugging
+  console.log("Received unfreeze request payload:", req.body);
   console.log(`Unfreezing card: cardNo = ${cardNo}, maskedCardNumber = ${maskedCardNumber || 'N/A'}`);
   
-  // Example response after a successful unfreeze operation
-  res.json({
-    success: true,
-    code: 200,
-    msg: "Success",
-    data: {
-      status: "success",
-      statusStr: "成功"
-    }
-  });
+  // // Example response after a successful unfreeze operation
+  // res.json({
+  //   success: true,
+  //   code: 200,
+  //   msg: "Success",
+  //   data: {
+  //     status: "success",
+  //     statusStr: "成功"
+  //   }
+  // });
 });
 
 
