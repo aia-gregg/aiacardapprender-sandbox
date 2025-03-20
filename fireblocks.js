@@ -12,6 +12,10 @@ const options = {
   environment: 'sandbox'
 };
 
+// Instantiate the Fireblocks SDK client.
+// Let the SDK set the default API URL based on the environment.
+const fireblocksClient = new FireblocksSDK(FIREBLOCKS_PRIVATE_KEY_FILE, API_KEY, options);
+
 // Patch the internal Axios instance so that its baseURL is explicitly set as a string.
 if (fireblocksClient && fireblocksClient.axiosInstance) {
   const url = 'https://sandbox-api.fireblocks.io/v1';
@@ -20,10 +24,6 @@ if (fireblocksClient && fireblocksClient.axiosInstance) {
 } else {
   console.log("fireblocksClient.axiosInstance not available");
 }
-
-// Instantiate the Fireblocks SDK client.
-// Let the SDK set the default API URL based on the environment.
-const fireblocksClient = new FireblocksSDK(FIREBLOCKS_PRIVATE_KEY_FILE, API_KEY, options);
 
 module.exports = {
   /**
