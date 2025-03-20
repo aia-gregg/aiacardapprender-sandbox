@@ -13,7 +13,8 @@ const API_KEY = process.env.FIREBLOCKS_API_KEY;
 
 // Set options explicitly, including baseUrl
 const options = { 
-  environment: 'sandbox'
+  environment: 'sandbox',
+  baseURL: 'https://sandbox-api.fireblocks.io/v1'
 };
 
 // Instantiate the Fireblocks SDK client.
