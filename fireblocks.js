@@ -18,7 +18,8 @@ const fireblocksClient = new FireblocksSDK(FIREBLOCKS_PRIVATE_KEY_FILE, API_KEY,
 
 // Patch the internal Axios instance so that its baseURL is explicitly set as a string.
 if (fireblocksClient && fireblocksClient.axiosInstance) {
-  fireblocksClient.axiosInstance.defaults.baseURL = 'https://sandbox-api.fireblocks.io/v1';
+  const baseURL = 'https://sandbox-api.fireblocks.io/v1';
+  fireblocksClient.axiosInstance.defaults.baseURL = baseURL.toString();
   console.log("Patched axios baseURL:", fireblocksClient.axiosInstance.defaults.baseURL);
 } else {
   console.log("fireblocksClient.axiosInstance not available");
