@@ -9,7 +9,6 @@ const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fet
 const stripe = require('stripe')('sk_test_51Qy1IkDO1xHmcck34QjJM47p4jkKFGViTuIVlbY1njZqObWxc9hWMvrWCsiSVgCRd08Xx1fyfXYG90Hxw6yl84WO00Xt3GGTjU'); // Test secret key
 const { merchantPrivateKey, callWasabiApi } = require('./wasabiApi');
 const fireblocks = require('./fireblocks');
-const socketIo = require('socket.io');
 const http = require('http');
 
 // MongoDB Connection
@@ -44,7 +43,6 @@ const secretKey = "your_super_secret_key";
 
 const app = express();
 const port = process.env.PORT || 3000;
-const io = socketIo(server, { /* options if needed */ });
 
 // Middleware
 app.use(cors());
@@ -211,8 +209,7 @@ app.post(
             { 
               $set: { 
                 [cardFieldName]: cardNo,
-                [cardStatusField]: status 
-                // || "Normal"  // use Wasabi's status if provided, otherwise "Normal"
+                [cardStatusField]: status // use Wasabi's status if provided
               },
               $inc: { activeCards: 1 }
             }
@@ -234,7 +231,6 @@ app.post(
           const collection = database.collection("aiacard-sandox-col");
 
           // For freeze/unfreeze, use the status from the webhook payload.
-          // Do not use a static value.
           const updatedStatus = status;
           if (!updatedStatus) {
             console.error('No status provided in webhook payload for freeze/unfreeze.');
