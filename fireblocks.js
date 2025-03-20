@@ -51,7 +51,13 @@ function generateFireblocksJwt(uri, method, body) {
   }
 
   // Sign the JWT with RS256 using your decoded private key
-  return jwt.sign(payload, PRIVATE_KEY, { algorithm: 'RS256' });
+  const token = jwt.sign(payload, PRIVATE_KEY, { algorithm: 'RS256' });
+
+  // Log the JWT header and payload for debugging (remove in production)
+  const decoded = jwt.decode(token, { complete: true });
+  console.log("JWT Header and Payload:", JSON.stringify(decoded, null, 2));
+
+  return token;
 }
 
 /**
