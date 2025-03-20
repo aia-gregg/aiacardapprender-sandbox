@@ -135,155 +135,92 @@ app.post('/openCard', async (req, res) => {
   // 6-digit OTP
 
 // Webhook endpoint for Wasabi API
-app.post(
-  '/webhook',
-  express.json({
-    verify: (req, res, buf) => {
-      req.rawBody = buf.toString();
-    }
-  }),
-  (req, res) => {
-    // Immediately acknowledge with the expected JSON response
-    const responsePayload = {
-      success: true,
-      code: 200,
-      msg: "Success",
-      data: null
-    };
-    res.status(200).json(responsePayload);
-
-    console.log('Webhook immediately acknowledged with response:', responsePayload);
-
-    // Process the webhook asynchronously so as not to delay the response
-    setImmediate(async () => {
-      console.log('Webhook raw payload:', req.rawBody);
-      console.log('Webhook parsed payload:', req.body);
-
-      // Check for a signature header if provided
-      const signature = req.headers['x-signature'];
-      if (signature) {
-        const computedSignature = crypto.createHmac('sha256', process.env.WASABI_WEBHOOK_SECRET)
-                                        .update(req.rawBody)
-                                        .digest('hex');
-        console.log('Computed signature:', computedSignature);
-        console.log('Received signature:', signature);
-        if (computedSignature !== signature) {
-          console.error('Signature verification failed.');
-          return;
-        }
-      } else {
-        console.warn('No signature header found.');
-      }
-
-      // Extract key parameters from the webhook payload
-      const { orderNo, cardNo, type, status } = req.body;
-      if (!orderNo || !cardNo) {
-        console.error('Missing orderNo or cardNo in webhook payload.');
-        return;
-      }
-
-      // Process create events
-      if (type === 'create') {
-        try {
-          const database = client.db("aiacard-sandbox-db");
-          const collection = database.collection("aiacard-sandox-col");
-
-          // Lookup the user by orderNo only
-          const user = await collection.findOne({ orderNo: orderNo });
-          if (!user) {
-            console.error(`No user found with orderNo: ${orderNo}`);
-            return;
-          }
-
-          // Determine the current number of active cards (default to 0 if not set)
-          const activeCards = user.activeCards || 0;
-          const newCardIndex = activeCards + 1;
-          // Create a new field name for card number, e.g., "cardNo1", "cardNo2", etc.
-          const cardFieldName = `cardNo${newCardIndex}`;
-          // Also create a corresponding status field, e.g., "cardNo1Status"
-          const cardStatusField = `cardNo${newCardIndex}Status`;
-
-          // Update the user record: add the new card number and status field, increment activeCards
-          const updateResult = await collection.updateOne(
-            { _id: user._id },
-            { 
-              $set: { 
-                [cardFieldName]: cardNo,
-                [cardStatusField]: status // use Wasabi's status if provided
-              },
-              $inc: { activeCards: 1 }
-            }
-          );
-
-          if (updateResult.modifiedCount > 0) {
-            console.log(`User ${user.email} updated: ${cardFieldName} set to ${cardNo} and ${cardStatusField} set to ${status || "Normal"}. Active cards now: ${newCardIndex}`);
-          } else {
-            console.error('Failed to update user record with new card information.');
-          }
-        } catch (dbError) {
-          console.error('Error updating MongoDB with card details:', dbError);
-        }
-      }
-      // Process freeze/unfreeze events
-      else if (type === 'freeze' || type === 'unfreeze') {
-        try {
-          const database = client.db("aiacard-sandbox-db");
-          const collection = database.collection("aiacard-sandox-col");
-
-          // For freeze/unfreeze, use the status from the webhook payload.
-          const updatedStatus = status;
-          if (!updatedStatus) {
-            console.error('No status provided in webhook payload for freeze/unfreeze.');
-            return;
-          }
-
-          // Lookup the user record by dynamically searching for the cardNo in all keys.
-          // (This approach iterates over all users; in production, you may wish to optimize this.)
-          const users = await collection.find({}).toArray();
-          let userRecord = null;
-          for (const u of users) {
-            // Get all keys that start with "cardNo" but do NOT end with "Status"
-            const cardKeys = Object.keys(u).filter(key => key.startsWith("cardNo") && !key.endsWith("Status"));
-            if (cardKeys.some(key => u[key] === cardNo)) {
-              userRecord = u;
-              break;
-            }
-          }
-          if (!userRecord) {
-            console.error(`No user found with cardNo: ${cardNo}`);
-            return;
-          }
-
-          // Dynamically determine which card field matches this cardNo.
-          const matchingFields = Object.keys(userRecord).filter(key => key.startsWith("cardNo") && !key.endsWith("Status") && userRecord[key] === cardNo);
-          if (!matchingFields || matchingFields.length === 0) {
-            console.error(`Could not determine card field for cardNo: ${cardNo}`);
-            return;
-          }
-          const cardField = matchingFields[0];
-          const statusField = `${cardField}Status`;
-
-          // Update the user record with the final status from Wasabi.
-          const updateResult = await collection.updateOne(
-            { _id: userRecord._id },
-            { $set: { [statusField]: updatedStatus } }
-          );
-
-          if (updateResult.modifiedCount > 0) {
-            console.log(`User ${userRecord.email} updated: ${statusField} set to ${updatedStatus} for cardNo: ${cardNo}`);
-          } else {
-            console.error(`Failed to update card status for user ${userRecord.email}`);
-          }
-        } catch (error) {
-          console.error('Error processing freeze/unfreeze webhook:', error);
-        }
-      } else {
-        console.log(`Webhook type is ${type} (expected 'create', 'freeze', or 'unfreeze'). Skipping processing.`);
-        return;
-      }
-    });
+app.post('/webhook', express.json({
+  verify: (req, res, buf) => {
+    req.rawBody = buf.toString();
   }
-);
+}), (req, res) => {
+  // Immediately acknowledge with the expected JSON response
+  const responsePayload = {
+    success: true,
+    code: 200,
+    msg: "Success",
+    data: null
+  };
+  res.status(200).json(responsePayload);
+
+  // Console log to indicate immediate acknowledgement
+  console.log('Webhook immediately acknowledged with response:', responsePayload);
+
+  // Process the webhook asynchronously so as not to delay the response
+  setImmediate(async () => {
+    console.log('Webhook raw payload:', req.rawBody);
+    console.log('Webhook parsed payload:', req.body);
+
+    // Check for a signature header if provided
+    const signature = req.headers['x-signature'];
+    if (signature) {
+      const computedSignature = crypto.createHmac('sha256', process.env.WASABI_WEBHOOK_SECRET)
+                                      .update(req.rawBody)
+                                      .digest('hex');
+      console.log('Computed signature:', computedSignature);
+      console.log('Received signature:', signature);
+      if (computedSignature !== signature) {
+        console.error('Signature verification failed.');
+        return;
+      }
+    } else {
+      console.warn('No signature header found.');
+    }
+
+    // Extract key parameters from the webhook payload
+    const { orderNo, cardNo, type } = req.body;
+    if (!orderNo || !cardNo) {
+      console.error('Missing orderNo or cardNo in webhook payload.');
+      return;
+    }
+    // Only process webhook if type is 'create'
+    if (type !== 'create') {
+      console.log(`Webhook type is ${type} (expected 'create'). Skipping processing.`);
+      return;
+    }
+
+    try {
+      const database = client.db("aiacard-sandbox-db");
+      const collection = database.collection("aiacard-sandox-col");
+
+      // Lookup the user by orderNo only
+      const user = await collection.findOne({ orderNo: orderNo });
+      if (!user) {
+        console.error(`No user found with orderNo: ${orderNo}`);
+        return;
+      }
+
+      // Determine the current number of active cards (default to 0 if not set)
+      const activeCards = user.activeCards || 0;
+      const newCardIndex = activeCards + 1;
+      // Create a new field name, e.g., "cardNo1", "cardNo2", etc.
+      const cardFieldName = `cardNo${newCardIndex}`;
+
+      // Update the user record: add the new cardNo field and increment activeCards
+      const updateResult = await collection.updateOne(
+        { _id: user._id },
+        { 
+          $set: { [cardFieldName]: cardNo },
+          $inc: { activeCards: 1 }
+        }
+      );
+
+      if (updateResult.modifiedCount > 0) {
+        console.log(`User ${user.email} updated: ${cardFieldName} set to ${cardNo}. Active cards now: ${newCardIndex}`);
+      } else {
+        console.error('Failed to update user record with new card information.');
+      }
+    } catch (dbError) {
+      console.error('Error updating MongoDB with card details:', dbError);
+    }
+  });
+});
 
 // A helper function to decrypt a base64-encoded field from Wasabi using your RSA private key.
 function decryptRSA(encryptedBase64, privateKey) {
