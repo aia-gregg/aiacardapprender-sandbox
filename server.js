@@ -55,84 +55,110 @@ client.connect()
   .then(() => console.log("✅ Connected to MongoDB"))
   .catch((err) => console.error("❌ Error connecting to MongoDB:", err));
 
-  const userSchema = new mongoose.Schema({
-    email: { type: String, required: true, unique: true },
-    totpSecret: { type: String },
-    twoFAEnabled: { type: Boolean, default: false },
-  });
-  
-  const User = mongoose.model('User', userSchema);
-  
-  /**
-   * GET /api/generate-2fa?email=<user-email>
-   *
-   * This endpoint generates (or reuses) a TOTP secret for the user,
-   * saves it in MongoDB, and returns the otpauth URL that Google Authenticator uses.
-   */
-  app.get('/api/generate-2fa', async (req, res) => {
-    const email = req.query.email;
-    if (!email) {
-      return res.status(400).json({ error: 'Missing email parameter' });
+// Connect to MongoDB (ensure process.env.MONGODB_URI is set in your environment)
+mongoose.connect(process.env.MONGODB_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+})
+  .then(() => console.log('Connected to MongoDB'))
+  .catch(err => console.error('MongoDB connection error:', err));
+
+// Define the user schema and model.
+const userSchema = new mongoose.Schema({
+  email: { type: String, required: true, unique: true },
+  totpSecret: { type: String },
+  twoFAEnabled: { type: Boolean, default: false },
+});
+
+const User = mongoose.model('User', userSchema);
+
+/**
+ * GET /api/generate-2fa?email=<user-email>
+ *
+ * Generates (or reuses) a TOTP secret for the user, saves it in MongoDB,
+ * and returns the otpauth URL for Google Authenticator.
+ */
+app.get('/api/generate-2fa', async (req, res) => {
+  const email = req.query.email;
+  console.log('Received /api/generate-2fa request with email:', email);
+
+  if (!email) {
+    console.error('Missing email parameter');
+    return res.status(400).json({ error: 'Missing email parameter' });
+  }
+
+  try {
+    // Find the user or create a new user document.
+    let user = await User.findOne({ email });
+    console.log('User found:', user);
+    if (!user) {
+      console.log('No user found. Creating new user document for email:', email);
+      user = new User({ email });
     }
-  
-    try {
-      // Find the user or create a new user document.
-      let user = await User.findOne({ email });
-      if (!user) {
-        user = new User({ email });
-      }
-  
-      // Generate a new secret if one is not already set.
-      if (!user.totpSecret) {
-        user.totpSecret = otplib.authenticator.generateSecret();
-        await user.save();
-      }
-  
-      // Create the otpauth URL. Google Authenticator recognizes this format.
-      const issuer = 'AIA Pay';
-      const otpauthUrl = otplib.authenticator.keyuri(email, issuer, user.totpSecret);
-  
-      // Return only the otpauthUrl (you generally wouldn't return the secret).
-      res.json({ otpauthUrl });
-    } catch (error) {
-      console.error('Error generating 2FA data:', error);
-      res.status(500).json({ error: 'Internal server error' });
+
+    // Generate a new secret if one is not already set.
+    if (!user.totpSecret) {
+      user.totpSecret = otplib.authenticator.generateSecret();
+      console.log(`Generated totpSecret for ${email}:`, user.totpSecret);
+      await user.save();
+      console.log('User document saved:', user);
+    } else {
+      console.log(`User already has totpSecret for ${email}:`, user.totpSecret);
     }
-  });
-  
-  /**
-   * POST /api/verify-2fa
-   *
-   * Request body should include: { email: string, otp: string }
-   * This endpoint verifies the OTP code using the secret stored in MongoDB.
-   * If successful, it marks the user’s 2FA as enabled.
-   */
-  app.post('/api/verify-2fa', async (req, res) => {
-    const { email, otp } = req.body;
-    if (!email || !otp) {
-      return res.status(400).json({ error: 'Missing email or otp in request body' });
+
+    // Create the otpauth URL.
+    const issuer = 'AIA Pay';
+    const otpauthUrl = otplib.authenticator.keyuri(email, issuer, user.totpSecret);
+    console.log('Generated otpauthUrl:', otpauthUrl);
+
+    res.json({ otpauthUrl });
+  } catch (error) {
+    console.error('Error generating 2FA data:', error);
+    res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
+/**
+ * POST /api/verify-2fa
+ *
+ * Request body should include: { email: string, otp: string }
+ * Verifies the OTP code using the stored secret in MongoDB.
+ * If valid, marks the user's 2FA as enabled.
+ */
+app.post('/api/verify-2fa', async (req, res) => {
+  const { email, otp } = req.body;
+  console.log('Received /api/verify-2fa request with email:', email, 'and otp:', otp);
+
+  if (!email || !otp) {
+    console.error('Missing email or otp in request body');
+    return res.status(400).json({ error: 'Missing email or otp in request body' });
+  }
+
+  try {
+    const user = await User.findOne({ email });
+    console.log('User found for verification:', user);
+    if (!user || !user.totpSecret) {
+      console.error('User not found or 2FA not initialized for email:', email);
+      return res.status(400).json({ error: 'User not found or 2FA not initialized' });
     }
-  
-    try {
-      const user = await User.findOne({ email });
-      if (!user || !user.totpSecret) {
-        return res.status(400).json({ error: 'User not found or 2FA not initialized' });
-      }
-  
-      // Verify the OTP code using the stored secret.
-      const isValid = otplib.authenticator.check(otp, user.totpSecret);
-      if (isValid) {
-        user.twoFAEnabled = true;
-        await user.save();
-        return res.json({ valid: true });
-      } else {
-        return res.json({ valid: false });
-      }
-    } catch (error) {
-      console.error('Error verifying OTP:', error);
-      res.status(500).json({ error: 'Internal server error' });
+
+    // Verify the OTP code.
+    const isValid = otplib.authenticator.check(otp, user.totpSecret);
+    console.log(`OTP verification for ${email}:`, isValid);
+
+    if (isValid) {
+      user.twoFAEnabled = true;
+      await user.save();
+      console.log('User updated with twoFAEnabled:', user);
+      return res.json({ valid: true });
+    } else {
+      return res.json({ valid: false });
     }
-  });
+  } catch (error) {
+    console.error('Error verifying OTP:', error);
+    res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
 
 // Helper: Generate a 4-digit OTP
 function generateOTP() {
