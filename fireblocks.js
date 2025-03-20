@@ -10,7 +10,12 @@ const PRIVATE_KEY = fs.readFileSync('./fireblocks_secret.key', 'utf8');
 const API_KEY = process.env.FIREBLOCKS_API_KEY;
 
 // Optionally, set additional options (e.g., choose 'sandbox' or 'production')
-const options = { environment: 'sandbox' };
+
+// Set options explicitly, including baseUrl
+const options = { 
+  environment: 'sandbox',
+  baseUrl: 'https://sandbox-api.fireblocks.io/v1'  // Explicitly set base URL for sandbox
+};
 
 // Instantiate the Fireblocks SDK client.
 // The SDK will handle JWT signing and other authentication details.
