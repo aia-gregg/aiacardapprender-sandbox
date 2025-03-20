@@ -159,7 +159,7 @@ app.post(
       console.log('Webhook raw payload:', req.rawBody);
       console.log('Webhook parsed payload:', req.body);
 
-      // Verify signature if provided
+      // Check for a signature header if provided
       const signature = req.headers['x-signature'];
       if (signature) {
         const computedSignature = crypto.createHmac('sha256', process.env.WASABI_WEBHOOK_SECRET)
@@ -176,13 +176,13 @@ app.post(
       }
 
       // Extract key parameters from the webhook payload
-      const { orderNo, cardNo, type, finalStatus } = req.body;
+      const { orderNo, cardNo, type } = req.body;
       if (!orderNo || !cardNo) {
         console.error('Missing orderNo or cardNo in webhook payload.');
         return;
       }
 
-      // Process "create" events (no change here)
+      // Process create events
       if (type === 'create') {
         try {
           const database = client.db("aiacard-sandbox-db");
@@ -198,18 +198,18 @@ app.post(
           // Determine the current number of active cards (default to 0 if not set)
           const activeCards = user.activeCards || 0;
           const newCardIndex = activeCards + 1;
-          // Create a new field name, e.g., "cardNo1", "cardNo2", etc.
+          // Create a new field name for card number, e.g., "cardNo1", "cardNo2", etc.
           const cardFieldName = `cardNo${newCardIndex}`;
-          // NEW: Also create a status field for the card, e.g., "cardNo1Status"
+          // Also create a corresponding status field, e.g., "cardNo1Status"
           const cardStatusField = `cardNo${newCardIndex}Status`;
 
-          // Update the user record: add the new card number and status field, and increment activeCards
+          // Update the user record: add the new card number and status field, increment activeCards
           const updateResult = await collection.updateOne(
             { _id: user._id },
             { 
               $set: { 
                 [cardFieldName]: cardNo,
-                [cardStatusField]: "Normal"  // initial status
+                [cardStatusField]: "Normal"  // initial status is "Normal"
               },
               $inc: { activeCards: 1 }
             }
@@ -224,63 +224,56 @@ app.post(
           console.error('Error updating MongoDB with card details:', dbError);
         }
       }
-      // Process freeze/unfreeze events via webhook
+      // Process freeze/unfreeze events
       else if (type === 'freeze' || type === 'unfreeze') {
         try {
           const database = client.db("aiacard-sandbox-db");
           const collection = database.collection("aiacard-sandox-col");
 
-          // Determine the final status:
-          // Use req.body.finalStatus if provided; otherwise, default based on type.
-          const updatedStatus = finalStatus || (type === 'freeze' ? 'Freeze' : 'Normal');
+          // Determine the final status based on webhook type.
+          // Use req.body.finalStatus if provided; otherwise, default to "Freeze" for freeze, "Normal" for unfreeze.
+          const updatedStatus = req.body.finalStatus || (type === 'freeze' ? 'Freeze' : 'Normal');
 
-          // Lookup the user record using the cardNo.
-          // Adjust the $or query to list all fields where a card might be stored.
+          // Lookup the user record by dynamically searching for the cardNo in all keys
           const user = await collection.findOne({
-            $or: [
-              { cardNo1: cardNo },
-              { cardNo2: cardNo },
-              { cardNo3: cardNo },
-              { cardNo4: cardNo },
-              // Add additional fields as necessary.
-            ]
+            $or: Object.keys(req.body).map(() => ({})) // placeholder, see below.
           });
-
-          if (!user) {
+          // Instead, let's search all users, then filter in-memory.
+          const users = await collection.find({}).toArray();
+          let userRecord = null;
+          for (const u of users) {
+            // Dynamically get all keys that start with "cardNo" and do NOT end with "Status"
+            const cardKeys = Object.keys(u).filter(key => key.startsWith("cardNo") && !key.endsWith("Status"));
+            if (cardKeys.some(key => u[key] === cardNo)) {
+              userRecord = u;
+              break;
+            }
+          }
+          if (!userRecord) {
             console.error(`No user found with cardNo: ${cardNo}`);
             return;
           }
 
-          // Determine which card field matches this cardNo.
-          let cardField = null;
-          for (let i = 1; i <= 10; i++) {
-            const field = `cardNo${i}`;
-            if (user[field] === cardNo) {
-              cardField = field;
-              break;
-            }
-          }
-          if (!cardField) {
+          // Dynamically determine which card field matches this cardNo.
+          const matchingFields = Object.keys(userRecord).filter(key => key.startsWith("cardNo") && !key.endsWith("Status") && userRecord[key] === cardNo);
+          if (!matchingFields || matchingFields.length === 0) {
             console.error(`Could not determine card field for cardNo: ${cardNo}`);
             return;
           }
-
-          // Derive the corresponding status field.
+          // Use the first matching field
+          const cardField = matchingFields[0];
           const statusField = `${cardField}Status`;
 
-          // Update the user record with the final status from Wasabi.
+          // Update the user record with the new status from Wasabi.
           const updateResult = await collection.updateOne(
-            { _id: user._id },
+            { _id: userRecord._id },
             { $set: { [statusField]: updatedStatus } }
           );
 
           if (updateResult.modifiedCount > 0) {
-            console.log(`User ${user.email} updated: ${statusField} set to ${updatedStatus} for cardNo: ${cardNo}`);
-            // Emit a real-time update to the client via Socket.io.
-            // Here we assume that your client has joined a room with the name of the user id.
-            io.to(user._id.toString()).emit("cardStatusUpdate", { cardNo, finalStatus: updatedStatus });
+            console.log(`User ${userRecord.email} updated: ${statusField} set to ${updatedStatus} for cardNo: ${cardNo}`);
           } else {
-            console.error(`Failed to update card status for user ${user.email}`);
+            console.error(`Failed to update card status for user ${userRecord.email}`);
           }
         } catch (error) {
           console.error('Error processing freeze/unfreeze webhook:', error);
