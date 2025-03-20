@@ -56,12 +56,7 @@ client.connect()
   .catch((err) => console.error("❌ Error connecting to MongoDB:", err));
 
 // Connect to MongoDB (ensure process.env.MONGODB_URI is set in your environment)
-mongoose.connect(process.env.MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-  .then(() => console.log('Connected to MongoDB'))
-  .catch(err => console.error('MongoDB connection error:', err));
+mongoose.connect(process.env.MONGODB_URI)
 
 // Define the user schema and model.
 const userSchema = new mongoose.Schema({
