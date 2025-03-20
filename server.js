@@ -9,6 +9,8 @@ const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fet
 const stripe = require('stripe')('sk_test_51Qy1IkDO1xHmcck34QjJM47p4jkKFGViTuIVlbY1njZqObWxc9hWMvrWCsiSVgCRd08Xx1fyfXYG90Hxw6yl84WO00Xt3GGTjU'); // Test secret key
 const { merchantPrivateKey, callWasabiApi } = require('./wasabiApi');
 const fireblocks = require('./fireblocks');
+const socketIo = require('socket.io');
+const http = require('http');
 
 // MongoDB Connection
 const uri = "mongodb+srv://faz:p6dH6vkUBrcGy4Ed@aiacard-sandbox.a03vg.mongodb.net/?retryWrites=true&w=majority&appName=aiacard-sandbox";
