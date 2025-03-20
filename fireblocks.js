@@ -12,13 +12,15 @@ const API_KEY = process.env.FIREBLOCKS_API_KEY;
 // Optionally, set additional options (e.g., choose 'sandbox' or 'production')
 
 // Set options explicitly, including baseUrl
-const options = { 
-  environment: 'sandbox'
-};
+// const options = { 
+//   environment: 'sandbox'
+// };
 
 // Instantiate the Fireblocks SDK client.
 // The SDK will handle JWT signing and other authentication details.
-const fireblocksClient = new FireblocksSDK(FIREBLOCKS_PRIVATE_KEY_FILE, API_KEY, options);
+// const fireblocksClient = new FireblocksSDK(FIREBLOCKS_PRIVATE_KEY_FILE, API_KEY, options);
+const fireblocksClient = new FireblocksSDK(FIREBLOCKS_PRIVATE_KEY_FILE, API_KEY, { environment: 'sandbox' });
+
 
 // Export the functions that wrap the Fireblocks SDK methods.
 module.exports = {
