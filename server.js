@@ -42,6 +42,7 @@ const secretKey = "your_super_secret_key";
 
 const app = express();
 const port = process.env.PORT || 3000;
+const io = socketIo(server, { /* options if needed */ });
 
 // Middleware
 app.use(cors());
@@ -134,92 +135,163 @@ app.post('/openCard', async (req, res) => {
   // 6-digit OTP
 
 // Webhook endpoint for Wasabi API
-app.post('/webhook', express.json({
-  verify: (req, res, buf) => {
-    req.rawBody = buf.toString();
-  }
-}), (req, res) => {
-  // Immediately acknowledge with the expected JSON response
-  const responsePayload = {
-    success: true,
-    code: 200,
-    msg: "Success",
-    data: null
-  };
-  res.status(200).json(responsePayload);
-
-  // Console log to indicate immediate acknowledgement
-  console.log('Webhook immediately acknowledged with response:', responsePayload);
-
-  // Process the webhook asynchronously so as not to delay the response
-  setImmediate(async () => {
-    console.log('Webhook raw payload:', req.rawBody);
-    console.log('Webhook parsed payload:', req.body);
-
-    // Check for a signature header if provided
-    const signature = req.headers['x-signature'];
-    if (signature) {
-      const computedSignature = crypto.createHmac('sha256', process.env.WASABI_WEBHOOK_SECRET)
-                                      .update(req.rawBody)
-                                      .digest('hex');
-      console.log('Computed signature:', computedSignature);
-      console.log('Received signature:', signature);
-      if (computedSignature !== signature) {
-        console.error('Signature verification failed.');
-        return;
-      }
-    } else {
-      console.warn('No signature header found.');
+app.post(
+  '/webhook',
+  express.json({
+    verify: (req, res, buf) => {
+      req.rawBody = buf.toString();
     }
+  }),
+  (req, res) => {
+    // Immediately acknowledge with the expected JSON response
+    const responsePayload = {
+      success: true,
+      code: 200,
+      msg: "Success",
+      data: null
+    };
+    res.status(200).json(responsePayload);
 
-    // Extract key parameters from the webhook payload
-    const { orderNo, cardNo, type } = req.body;
-    if (!orderNo || !cardNo) {
-      console.error('Missing orderNo or cardNo in webhook payload.');
-      return;
-    }
-    // Only process webhook if type is 'create'
-    if (type !== 'create') {
-      console.log(`Webhook type is ${type} (expected 'create'). Skipping processing.`);
-      return;
-    }
+    console.log('Webhook immediately acknowledged with response:', responsePayload);
 
-    try {
-      const database = client.db("aiacard-sandbox-db");
-      const collection = database.collection("aiacard-sandox-col");
+    // Process the webhook asynchronously so as not to delay the response
+    setImmediate(async () => {
+      console.log('Webhook raw payload:', req.rawBody);
+      console.log('Webhook parsed payload:', req.body);
 
-      // Lookup the user by orderNo only
-      const user = await collection.findOne({ orderNo: orderNo });
-      if (!user) {
-        console.error(`No user found with orderNo: ${orderNo}`);
-        return;
-      }
-
-      // Determine the current number of active cards (default to 0 if not set)
-      const activeCards = user.activeCards || 0;
-      const newCardIndex = activeCards + 1;
-      // Create a new field name, e.g., "cardNo1", "cardNo2", etc.
-      const cardFieldName = `cardNo${newCardIndex}`;
-
-      // Update the user record: add the new cardNo field and increment activeCards
-      const updateResult = await collection.updateOne(
-        { _id: user._id },
-        { 
-          $set: { [cardFieldName]: cardNo },
-          $inc: { activeCards: 1 }
+      // Verify signature if provided
+      const signature = req.headers['x-signature'];
+      if (signature) {
+        const computedSignature = crypto.createHmac('sha256', process.env.WASABI_WEBHOOK_SECRET)
+                                        .update(req.rawBody)
+                                        .digest('hex');
+        console.log('Computed signature:', computedSignature);
+        console.log('Received signature:', signature);
+        if (computedSignature !== signature) {
+          console.error('Signature verification failed.');
+          return;
         }
-      );
-
-      if (updateResult.modifiedCount > 0) {
-        console.log(`User ${user.email} updated: ${cardFieldName} set to ${cardNo}. Active cards now: ${newCardIndex}`);
       } else {
-        console.error('Failed to update user record with new card information.');
+        console.warn('No signature header found.');
       }
-    } catch (dbError) {
-      console.error('Error updating MongoDB with card details:', dbError);
-    }
-  });
-});
+
+      // Extract key parameters from the webhook payload
+      const { orderNo, cardNo, type, finalStatus } = req.body;
+      if (!orderNo || !cardNo) {
+        console.error('Missing orderNo or cardNo in webhook payload.');
+        return;
+      }
+
+      // Process "create" events (no change here)
+      if (type === 'create') {
+        try {
+          const database = client.db("aiacard-sandbox-db");
+          const collection = database.collection("aiacard-sandox-col");
+
+          // Lookup the user by orderNo only
+          const user = await collection.findOne({ orderNo: orderNo });
+          if (!user) {
+            console.error(`No user found with orderNo: ${orderNo}`);
+            return;
+          }
+
+          // Determine the current number of active cards (default to 0 if not set)
+          const activeCards = user.activeCards || 0;
+          const newCardIndex = activeCards + 1;
+          // Create a new field name, e.g., "cardNo1", "cardNo2", etc.
+          const cardFieldName = `cardNo${newCardIndex}`;
+          // NEW: Also create a status field for the card, e.g., "cardNo1Status"
+          const cardStatusField = `cardNo${newCardIndex}Status`;
+
+          // Update the user record: add the new card number and status field, and increment activeCards
+          const updateResult = await collection.updateOne(
+            { _id: user._id },
+            { 
+              $set: { 
+                [cardFieldName]: cardNo,
+                [cardStatusField]: "Normal"  // initial status
+              },
+              $inc: { activeCards: 1 }
+            }
+          );
+
+          if (updateResult.modifiedCount > 0) {
+            console.log(`User ${user.email} updated: ${cardFieldName} set to ${cardNo} and ${cardStatusField} set to Normal. Active cards now: ${newCardIndex}`);
+          } else {
+            console.error('Failed to update user record with new card information.');
+          }
+        } catch (dbError) {
+          console.error('Error updating MongoDB with card details:', dbError);
+        }
+      }
+      // Process freeze/unfreeze events via webhook
+      else if (type === 'freeze' || type === 'unfreeze') {
+        try {
+          const database = client.db("aiacard-sandbox-db");
+          const collection = database.collection("aiacard-sandox-col");
+
+          // Determine the final status:
+          // Use req.body.finalStatus if provided; otherwise, default based on type.
+          const updatedStatus = finalStatus || (type === 'freeze' ? 'Freeze' : 'Normal');
+
+          // Lookup the user record using the cardNo.
+          // Adjust the $or query to list all fields where a card might be stored.
+          const user = await collection.findOne({
+            $or: [
+              { cardNo1: cardNo },
+              { cardNo2: cardNo },
+              { cardNo3: cardNo },
+              { cardNo4: cardNo },
+              // Add additional fields as necessary.
+            ]
+          });
+
+          if (!user) {
+            console.error(`No user found with cardNo: ${cardNo}`);
+            return;
+          }
+
+          // Determine which card field matches this cardNo.
+          let cardField = null;
+          for (let i = 1; i <= 10; i++) {
+            const field = `cardNo${i}`;
+            if (user[field] === cardNo) {
+              cardField = field;
+              break;
+            }
+          }
+          if (!cardField) {
+            console.error(`Could not determine card field for cardNo: ${cardNo}`);
+            return;
+          }
+
+          // Derive the corresponding status field.
+          const statusField = `${cardField}Status`;
+
+          // Update the user record with the final status from Wasabi.
+          const updateResult = await collection.updateOne(
+            { _id: user._id },
+            { $set: { [statusField]: updatedStatus } }
+          );
+
+          if (updateResult.modifiedCount > 0) {
+            console.log(`User ${user.email} updated: ${statusField} set to ${updatedStatus} for cardNo: ${cardNo}`);
+            // Emit a real-time update to the client via Socket.io.
+            // Here we assume that your client has joined a room with the name of the user id.
+            io.to(user._id.toString()).emit("cardStatusUpdate", { cardNo, finalStatus: updatedStatus });
+          } else {
+            console.error(`Failed to update card status for user ${user.email}`);
+          }
+        } catch (error) {
+          console.error('Error processing freeze/unfreeze webhook:', error);
+        }
+      } else {
+        console.log(`Webhook type is ${type} (expected 'create', 'freeze', or 'unfreeze'). Skipping processing.`);
+        return;
+      }
+    });
+  }
+);
 
 // A helper function to decrypt a base64-encoded field from Wasabi using your RSA private key.
 function decryptRSA(encryptedBase64, privateKey) {
@@ -1535,15 +1607,14 @@ app.post('/card-details', async (req, res) => {
   }
 });
 
-// Define the route that creates a vault account.
-// The request body should include: name, hiddenOnUI, customerRefId, autoFuel, vaultType, autoAssign.
 app.post('/create-vault-account', async (req, res) => {
   try {
-    const accountData = req.body;
-    const result = await fireblocks.createVaultAccount(accountData);
+    // Your payload is defined in the request body
+    const payload = req.body;
+    const result = await fireblocks.callFireblocksApi("POST", "/vault/accounts", payload);
     res.json({ success: true, data: result });
   } catch (error) {
-    console.error("Error creating vault account:", error);
+    console.error('Error calling Fireblocks API:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
