@@ -1,8 +1,3 @@
-// Attempt to patch the axios instance that Fireblocks SDK uses
-const axios = require('fireblocks-sdk/node_modules/axios');
-axios.defaults.baseURL = 'https://sandbox-api.fireblocks.io/v1';
-console.log("Patched axios defaults.baseURL:", axios.defaults.baseURL);
-
 const fs = require('fs');
 const { FireblocksSDK } = require('fireblocks-sdk');
 
@@ -21,13 +16,19 @@ const options = {
 // Let the SDK set the default API URL based on the environment.
 const fireblocksClient = new FireblocksSDK(FIREBLOCKS_PRIVATE_KEY_FILE, API_KEY, options);
 
-// Patch the internal Axios instance so that its baseURL is explicitly set as a string.
-if (fireblocksClient && fireblocksClient.axiosInstance) {
-  const url = 'https://sandbox-api.fireblocks.io/v1';
-  fireblocksClient.axiosInstance.defaults.baseURL = url.toString();
-  console.log("Patched axios baseURL:", fireblocksClient.axiosInstance.defaults.baseURL);
+// Attempt to patch the internal request method (_request) to force absolute URLs.
+if (fireblocksClient && typeof fireblocksClient._request === 'function') {
+  const originalRequest = fireblocksClient._request;
+  fireblocksClient._request = function(config) {
+    // If the URL is relative, prepend the full endpoint.
+    if (config.url && !config.url.startsWith('http')) {
+      config.url = 'https://sandbox-api.fireblocks.io/v1' + config.url;
+    }
+    return originalRequest.call(this, config);
+  };
+  console.log('Patched fireblocksClient._request to use absolute URLs.');
 } else {
-  console.log("fireblocksClient.axiosInstance not available");
+  console.warn('fireblocksClient._request is not available.');
 }
 
 module.exports = {
