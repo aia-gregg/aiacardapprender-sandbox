@@ -20,7 +20,6 @@
     "node-fetch": "^2.6.7",
     "nodemailer": "^6.9.1",
     "socket.io": "^4.8.1",
-    "stripe": "^8.219.0",
-    "expo-secure-store": "~14.0.1"
+    "stripe": "^8.219.0"
   }
 }
