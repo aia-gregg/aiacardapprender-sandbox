@@ -8,7 +8,9 @@ const crypto = require('crypto');
 const FIREBLOCKS_BASE_URL = process.env.FIREBLOCKS_BASE_URL;
 const API_KEY = process.env.FIREBLOCKS_API_KEY;
 // Decode the private key from base64 (assuming it's stored encoded)
-const PRIVATE_KEY = Buffer.from(process.env.FIREBLOCKS_PRIVATE_KEY, 'base64').toString('utf8');
+// const PRIVATE_KEY = Buffer.from(process.env.FIREBLOCKS_PRIVATE_KEY, 'base64').toString('utf8');
+// Alternatively, load the private key from a file:
+const PRIVATE_KEY = fs.readFileSync('./fireblocks_secret.key', 'utf8');
 
 /**
  * Generate a random nonce.
