@@ -10,7 +10,6 @@ const crypto = require('crypto');
 const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const { callWasabiApi } = require('./wasabiApi');
-const fireblocks = require('./fireblocks');
 
 // MongoDB Connection URI (set via environment variable on Render)
 const uri = process.env.MONGODB_URI;
@@ -567,18 +566,6 @@ app.post('/create-cardholder', async (req, res) => {
     res.json({ success: true, data: wasabiResult });
   } catch (error) {
     console.error("Error creating cardholder on WasabiCard API:", error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-app.post('/create-vault-account', async (req, res) => {
-  try {
-    // Your payload is defined in the request body
-    const payload = req.body;
-    const result = await fireblocks.callFireblocksApi("POST", "/vault/accounts", payload);
-    res.json({ success: true, data: result });
-  } catch (error) {
-    console.error('Error calling Fireblocks API:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
