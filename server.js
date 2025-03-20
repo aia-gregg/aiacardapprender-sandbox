@@ -8,6 +8,7 @@ const crypto = require('crypto');
 const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
 const stripe = require('stripe')('sk_test_51Qy1IkDO1xHmcck34QjJM47p4jkKFGViTuIVlbY1njZqObWxc9hWMvrWCsiSVgCRd08Xx1fyfXYG90Hxw6yl84WO00Xt3GGTjU'); // Test secret key
 const { merchantPrivateKey, callWasabiApi } = require('./wasabiApi');
+const fireblocks = require('./fireblocks');
 
 // MongoDB Connection
 const uri = "mongodb+srv://faz:p6dH6vkUBrcGy4Ed@aiacard-sandbox.a03vg.mongodb.net/?retryWrites=true&w=majority&appName=aiacard-sandbox";
@@ -1528,6 +1529,17 @@ app.post('/card-details', async (req, res) => {
   }
 });
 
+app.post('/create-vault-account', async (req, res) => {
+  try {
+    // Your payload is defined in the request body
+    const payload = req.body;
+    const result = await fireblocks.callFireblocksApi("POST", "/vault/accounts", payload);
+    res.json({ success: true, data: result });
+  } catch (error) {
+    console.error('Error calling Fireblocks API:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
 
 
 const server = app.listen(port, '0.0.0.0', () => {
