@@ -7,20 +7,23 @@ const FIREBLOCKS_PRIVATE_KEY_FILE = fs.readFileSync('./fireblocks_secret.key', '
 // Get the Fireblocks API key from your environment variables.
 const API_KEY = process.env.FIREBLOCKS_API_KEY;
 
-// Set options explicitly.
-// Here we explicitly set the API URL for sandbox (ensure that this is a string).
-const options = {
-  environment: 'sandbox',
-  apiUrl: 'https://sandbox-api.fireblocks.io/v1'
+// Set options using only the environment property.
+const options = { 
+  environment: 'sandbox'
 };
 
 // Instantiate the Fireblocks SDK client.
-// The SDK will handle JWT signing and other authentication details.
+// Let the SDK set the default API URL based on the environment.
 const fireblocksClient = new FireblocksSDK(FIREBLOCKS_PRIVATE_KEY_FILE, API_KEY, options);
-console.log("fireblocksClient.baseURL type:", typeof fireblocksClient.baseURL, "value:", fireblocksClient.baseURL);
 
+// Patch the internal Axios instance so that its baseURL is explicitly set as a string.
+if (fireblocksClient && fireblocksClient.axiosInstance) {
+  fireblocksClient.axiosInstance.defaults.baseURL = 'https://sandbox-api.fireblocks.io/v1';
+  console.log("Patched axios baseURL:", fireblocksClient.axiosInstance.defaults.baseURL);
+} else {
+  console.log("fireblocksClient.axiosInstance not available");
+}
 
-// Export the function wrapping the SDK method.
 module.exports = {
   /**
    * Creates a new vault account using the Fireblocks SDK.
