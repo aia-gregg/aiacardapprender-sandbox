@@ -178,7 +178,7 @@ app.post(
       }
 
       // Extract key parameters from the webhook payload
-      const { orderNo, cardNo, type } = req.body;
+      const { orderNo, cardNo, type, status } = req.body;
       if (!orderNo || !cardNo) {
         console.error('Missing orderNo or cardNo in webhook payload.');
         return;
@@ -211,14 +211,15 @@ app.post(
             { 
               $set: { 
                 [cardFieldName]: cardNo,
-                [cardStatusField]: "Normal"  // initial status is "Normal"
+                [cardStatusField]: status 
+                // || "Normal"  // use Wasabi's status if provided, otherwise "Normal"
               },
               $inc: { activeCards: 1 }
             }
           );
 
           if (updateResult.modifiedCount > 0) {
-            console.log(`User ${user.email} updated: ${cardFieldName} set to ${cardNo} and ${cardStatusField} set to Normal. Active cards now: ${newCardIndex}`);
+            console.log(`User ${user.email} updated: ${cardFieldName} set to ${cardNo} and ${cardStatusField} set to ${status || "Normal"}. Active cards now: ${newCardIndex}`);
           } else {
             console.error('Failed to update user record with new card information.');
           }
@@ -232,19 +233,20 @@ app.post(
           const database = client.db("aiacard-sandbox-db");
           const collection = database.collection("aiacard-sandox-col");
 
-          // Determine the final status based on webhook type.
-          // Use req.body.finalStatus if provided; otherwise, default to "Freeze" for freeze, "Normal" for unfreeze.
-          const updatedStatus = req.body.finalStatus || (type === 'freeze' ? 'Freeze' : 'Normal');
+          // For freeze/unfreeze, use the status from the webhook payload.
+          // Do not use a static value.
+          const updatedStatus = status;
+          if (!updatedStatus) {
+            console.error('No status provided in webhook payload for freeze/unfreeze.');
+            return;
+          }
 
-          // Lookup the user record by dynamically searching for the cardNo in all keys
-          const user = await collection.findOne({
-            $or: Object.keys(req.body).map(() => ({})) // placeholder, see below.
-          });
-          // Instead, let's search all users, then filter in-memory.
+          // Lookup the user record by dynamically searching for the cardNo in all keys.
+          // (This approach iterates over all users; in production, you may wish to optimize this.)
           const users = await collection.find({}).toArray();
           let userRecord = null;
           for (const u of users) {
-            // Dynamically get all keys that start with "cardNo" and do NOT end with "Status"
+            // Get all keys that start with "cardNo" but do NOT end with "Status"
             const cardKeys = Object.keys(u).filter(key => key.startsWith("cardNo") && !key.endsWith("Status"));
             if (cardKeys.some(key => u[key] === cardNo)) {
               userRecord = u;
@@ -262,11 +264,10 @@ app.post(
             console.error(`Could not determine card field for cardNo: ${cardNo}`);
             return;
           }
-          // Use the first matching field
           const cardField = matchingFields[0];
           const statusField = `${cardField}Status`;
 
-          // Update the user record with the new status from Wasabi.
+          // Update the user record with the final status from Wasabi.
           const updateResult = await collection.updateOne(
             { _id: userRecord._id },
             { $set: { [statusField]: updatedStatus } }
