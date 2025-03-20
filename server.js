@@ -1538,7 +1538,7 @@ app.post('/card-details', async (req, res) => {
 
 app.post('/create-vault-account', async (req, res) => {
   try {
-    // Your payload is defined in the request body now
+    // Your payload is defined in the request body
     const payload = req.body;
     const result = await fireblocks.createVaultAccount(payload);
     res.json({ success: true, data: result });
