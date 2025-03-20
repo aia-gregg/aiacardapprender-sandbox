@@ -1603,7 +1603,7 @@ app.post('/create-vault-account', async (req, res) => {
   try {
     // Your payload is defined in the request body
     const payload = req.body;
-    const result = await fireblocks.callFireblocksApi("POST", "/vault/accounts", payload);
+    const result = await fireblocks.createVaultAccount(payload);
     res.json({ success: true, data: result });
   } catch (error) {
     console.error('Error calling Fireblocks API:', error);
