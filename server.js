@@ -331,60 +331,64 @@ app.post('/get-active-cards', async (req, res) => {
   }
 });
 
-// Freeze endpoint
-app.post('/merchant/core/mcb/card/freeze', (req, res) => {
+// Freeze endpoint with dynamic Wasabi API call
+app.post('/merchant/core/mcb/card/freeze', async (req, res) => {
   const { cardNo, maskedCardNumber } = req.body;
-  
+
   if (!cardNo) {
-    return res.status(400).json({
+    const errorResponse = {
       success: false,
       code: 400,
       msg: "Missing cardNo parameter"
-    });
+    };
+    console.error("Freeze endpoint error:", errorResponse);
+    return res.status(400).json(errorResponse);
   }
-  
-  // Log the full payload for debugging
+
   console.log("Received freeze request payload:", req.body);
-  console.log(`Freezing card: cardNo = ${cardNo}, maskedCardNumber = ${maskedCardNumber || 'N/A'}`);
-  
-  // // Example response after a successful freeze operation
-  // res.json({
-  //   success: true,
-  //   code: 200,
-  //   msg: "Success",
-  //   data: {
-  //     status: "success",
-  //     statusStr: "成功"
-  //   }
-  // });
+
+  // Create the payload for Wasabi API
+  const payload = { cardNo, maskedCardNumber };
+
+  try {
+    // Call the Wasabi Pay API endpoint for freezing the card
+    const freezeResponse = await callWasabiApi('/merchant/core/mcb/card/freeze', payload);
+    console.log("Freeze response from Wasabi API:", freezeResponse);
+    res.json(freezeResponse);
+  } catch (error) {
+    console.error("Error freezing card:", error);
+    res.status(500).json({ success: false, code: 500, msg: "Internal Server Error" });
+  }
 });
 
-// Unfreeze endpoint
-app.post('/merchant/core/mcb/card/unfreeze', (req, res) => {
+// Unfreeze endpoint with dynamic Wasabi API call
+app.post('/merchant/core/mcb/card/unfreeze', async (req, res) => {
   const { cardNo, maskedCardNumber } = req.body;
-  
+
   if (!cardNo) {
-    return res.status(400).json({
+    const errorResponse = {
       success: false,
       code: 400,
       msg: "Missing cardNo parameter"
-    });
+    };
+    console.error("Unfreeze endpoint error:", errorResponse);
+    return res.status(400).json(errorResponse);
   }
-  
-  // Log the full payload for debugging
+
   console.log("Received unfreeze request payload:", req.body);
-  console.log(`Unfreezing card: cardNo = ${cardNo}, maskedCardNumber = ${maskedCardNumber || 'N/A'}`);
-  
-  // // Example response after a successful unfreeze operation
-  // res.json({
-  //   success: true,
-  //   code: 200,
-  //   msg: "Success",
-  //   data: {
-  //     status: "success",
-  //     statusStr: "成功"
-  //   }
-  // });
+
+  // Create the payload for Wasabi API
+  const payload = { cardNo, maskedCardNumber };
+
+  try {
+    // Call the Wasabi Pay API endpoint for unfreezing the card
+    const unfreezeResponse = await callWasabiApi('/merchant/core/mcb/card/unfreeze', payload);
+    console.log("Unfreeze response from Wasabi API:", unfreezeResponse);
+    res.json(unfreezeResponse);
+  } catch (error) {
+    console.error("Error unfreezing card:", error);
+    res.status(500).json({ success: false, code: 500, msg: "Internal Server Error" });
+  }
 });
 
 
