@@ -234,8 +234,8 @@ function decryptRSA(encryptedBase64, privateKey) {
         // If your encryption uses PKCS1 padding and you're on a newer Node version, you might need:
         // padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
         // Or run Node with the --openssl-legacy-provider flag and uncomment the line below:
-        // padding: crypto.constants.RSA_PKCS1_PADDING,
-        padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+        padding: crypto.constants.RSA_PKCS1_PADDING,
+        // padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
       },
       buffer
     );
