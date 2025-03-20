@@ -1,3 +1,8 @@
+// Attempt to patch the axios instance that Fireblocks SDK uses
+const axios = require('fireblocks-sdk/node_modules/axios');
+axios.defaults.baseURL = 'https://sandbox-api.fireblocks.io/v1';
+console.log("Patched axios defaults.baseURL:", axios.defaults.baseURL);
+
 const fs = require('fs');
 const { FireblocksSDK } = require('fireblocks-sdk');
 
