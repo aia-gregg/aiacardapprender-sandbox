@@ -3,6 +3,7 @@
 const fetch = require('node-fetch');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const fs = require('fs');
 
 // Fireblocks configuration (ensure these are set in your environment)
 const FIREBLOCKS_BASE_URL = process.env.FIREBLOCKS_BASE_URL;
