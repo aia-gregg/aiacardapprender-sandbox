@@ -1535,14 +1535,15 @@ app.post('/card-details', async (req, res) => {
   }
 });
 
+// Define the route that creates a vault account.
+// The request body should include: name, hiddenOnUI, customerRefId, autoFuel, vaultType, autoAssign.
 app.post('/create-vault-account', async (req, res) => {
   try {
-    // Your payload is defined in the request body
-    const payload = req.body;
-    const result = await fireblocks.callFireblocksApi("POST", "/vault/accounts", payload);
+    const accountData = req.body;
+    const result = await fireblocks.createVaultAccount(accountData);
     res.json({ success: true, data: result });
   } catch (error) {
-    console.error('Error calling Fireblocks API:', error);
+    console.error("Error creating vault account:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
