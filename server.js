@@ -10,6 +10,8 @@ const stripe = require('stripe')('sk_test_51Qy1IkDO1xHmcck34QjJM47p4jkKFGViTuIVl
 const { merchantPrivateKey, callWasabiApi } = require('./wasabiApi');
 const fireblocks = require('./fireblocks');
 const http = require('http');
+const otplib = require('otplib');
+const mongoose = require('mongoose');
 
 // MongoDB Connection
 const uri = "mongodb+srv://faz:p6dH6vkUBrcGy4Ed@aiacard-sandbox.a03vg.mongodb.net/?retryWrites=true&w=majority&appName=aiacard-sandbox";
@@ -52,6 +54,85 @@ app.use(express.json());
 client.connect()
   .then(() => console.log("✅ Connected to MongoDB"))
   .catch((err) => console.error("❌ Error connecting to MongoDB:", err));
+
+  const userSchema = new mongoose.Schema({
+    email: { type: String, required: true, unique: true },
+    totpSecret: { type: String },
+    twoFAEnabled: { type: Boolean, default: false },
+  });
+  
+  const User = mongoose.model('User', userSchema);
+  
+  /**
+   * GET /api/generate-2fa?email=<user-email>
+   *
+   * This endpoint generates (or reuses) a TOTP secret for the user,
+   * saves it in MongoDB, and returns the otpauth URL that Google Authenticator uses.
+   */
+  app.get('/api/generate-2fa', async (req, res) => {
+    const email = req.query.email;
+    if (!email) {
+      return res.status(400).json({ error: 'Missing email parameter' });
+    }
+  
+    try {
+      // Find the user or create a new user document.
+      let user = await User.findOne({ email });
+      if (!user) {
+        user = new User({ email });
+      }
+  
+      // Generate a new secret if one is not already set.
+      if (!user.totpSecret) {
+        user.totpSecret = otplib.authenticator.generateSecret();
+        await user.save();
+      }
+  
+      // Create the otpauth URL. Google Authenticator recognizes this format.
+      const issuer = 'AIA Pay';
+      const otpauthUrl = otplib.authenticator.keyuri(email, issuer, user.totpSecret);
+  
+      // Return only the otpauthUrl (you generally wouldn't return the secret).
+      res.json({ otpauthUrl });
+    } catch (error) {
+      console.error('Error generating 2FA data:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+  /**
+   * POST /api/verify-2fa
+   *
+   * Request body should include: { email: string, otp: string }
+   * This endpoint verifies the OTP code using the secret stored in MongoDB.
+   * If successful, it marks the user’s 2FA as enabled.
+   */
+  app.post('/api/verify-2fa', async (req, res) => {
+    const { email, otp } = req.body;
+    if (!email || !otp) {
+      return res.status(400).json({ error: 'Missing email or otp in request body' });
+    }
+  
+    try {
+      const user = await User.findOne({ email });
+      if (!user || !user.totpSecret) {
+        return res.status(400).json({ error: 'User not found or 2FA not initialized' });
+      }
+  
+      // Verify the OTP code using the stored secret.
+      const isValid = otplib.authenticator.check(otp, user.totpSecret);
+      if (isValid) {
+        user.twoFAEnabled = true;
+        await user.save();
+        return res.json({ valid: true });
+      } else {
+        return res.json({ valid: false });
+      }
+    } catch (error) {
+      console.error('Error verifying OTP:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
 
 // Helper: Generate a 4-digit OTP
 function generateOTP() {
