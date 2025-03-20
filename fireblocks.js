@@ -1,6 +1,6 @@
 // fireblocks.js
 const fs = require('fs');
-const FireblocksSDK = require('fireblocks-sdk');
+const { FireblocksSDK } = require('fireblocks-sdk');
 
 // Read the private key directly from the .key file.
 // Make sure the file is in the same directory or adjust the path accordingly.
