@@ -63,6 +63,9 @@ const userSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
   totpSecret: { type: String },
   twoFAEnabled: { type: Boolean, default: false },
+  isGAVerified: { type: Boolean, default: false },  // Ensure this is included
+  biometricsEnabled: { type: Boolean, default: false },
+  // ...other fields
 });
 
 const User = mongoose.model('User', userSchema);
@@ -140,7 +143,7 @@ app.post('/api/verify-2fa', async (req, res) => {
     if (isValid) {
       // Mark user as 2FA verified.
       user.twoFAEnabled = true;
-      user.isGAVerified = true;
+      user.isGAVerified = true;  // Set GA flag to true
       await user.save();
 
       // Generate a new token with updated user info.
