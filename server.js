@@ -9,12 +9,12 @@ const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fet
 const stripe = require('stripe')('sk_test_51Qy1IkDO1xHmcck34QjJM47p4jkKFGViTuIVlbY1njZqObWxc9hWMvrWCsiSVgCRd08Xx1fyfXYG90Hxw6yl84WO00Xt3GGTjU'); // Test secret key
 const { merchantPrivateKey, callWasabiApi } = require('./wasabiApi');
 const fireblocks = require('./fireblocks');
-const http = require('http');
+// const http = require('http');
 const otplib = require('otplib');
-const mongoose = require('mongoose');
+//const mongoose = require('mongoose');
 
 // MongoDB Connection
-const uri = "mongodb+srv://faz:p6dH6vkUBrcGy4Ed@aiacard-sandbox.a03vg.mongodb.net/?retryWrites=true&w=majority&appName=aiacard-sandbox";
+const uri = process.env.MONGODB_URI;
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -56,16 +56,19 @@ client.connect()
   .catch((err) => console.error("❌ Error connecting to MongoDB:", err));
 
 // Connect to MongoDB (ensure process.env.MONGODB_URI is set in your environment)
-mongoose.connect(process.env.MONGODB_URI)
+// mongoose.connect(process.env.MONGODB_URI)
 
 // Define the user schema and model.
-const userSchema = new mongoose.Schema({
-  email: { type: String, required: true, unique: true },
-  totpSecret: { type: String },
-  twoFAEnabled: { type: Boolean, default: false },
-});
+// const userSchema = new mongoose.Schema({
+//   email: { type: String, required: true, unique: true },
+//   totpSecret: { type: String },
+//   twoFAEnabled: { type: Boolean, default: false },
+//   isGAVerified: { type: Boolean, default: false },  // Ensure this is included
+//   biometricsEnabled: { type: Boolean, default: false },
+//   // ...other fields
+// });
 
-const User = mongoose.model('User', userSchema);
+// const User = mongoose.model('User', userSchema);
 
 /**
  * GET /api/generate-2fa?email=<user-email>
@@ -75,40 +78,34 @@ const User = mongoose.model('User', userSchema);
  */
 app.get('/api/generate-2fa', async (req, res) => {
   const email = req.query.email;
-  console.log('Received /api/generate-2fa request with email:', email);
-
   if (!email) {
-    console.error('Missing email parameter');
     return res.status(400).json({ error: 'Missing email parameter' });
   }
-
   try {
-    // Find the user or create a new user document.
-    let user = await User.findOne({ email });
-    console.log('User found:', user);
+    const database = client.db("aiacard-sandbox-db");
+    const collection = database.collection("aiacard-sandox-col");
+    let user = await collection.findOne({ email });
+    
     if (!user) {
-      console.log('No user found. Creating new user document for email:', email);
-      user = new User({ email });
+      const totpSecret = otplib.authenticator.generateSecret();
+      user = { 
+        email, 
+        totpSecret, 
+        twoFAEnabled: false, 
+        isGAVerified: false 
+        // add additional default fields as needed
+      };
+      await collection.insertOne(user);
+    } else if (!user.totpSecret) {
+      const totpSecret = otplib.authenticator.generateSecret();
+      await collection.updateOne({ email }, { $set: { totpSecret } });
+      user.totpSecret = totpSecret;
     }
-
-    // Generate a new secret if one is not already set.
-    if (!user.totpSecret) {
-      user.totpSecret = otplib.authenticator.generateSecret();
-      console.log(`Generated totpSecret for ${email}:`, user.totpSecret);
-      await user.save();
-      console.log('User document saved:', user);
-    } else {
-      console.log(`User already has totpSecret for ${email}:`, user.totpSecret);
-    }
-
-    // Create the otpauth URL.
+    
     const issuer = 'AIA Pay';
     const otpauthUrl = otplib.authenticator.keyuri(email, issuer, user.totpSecret);
-    console.log('Generated otpauthUrl:', otpauthUrl);
-
     res.json({ otpauthUrl });
   } catch (error) {
-    console.error('Error generating 2FA data:', error);
     res.status(500).json({ error: 'Internal server error', details: error.message });
   }
 });
@@ -120,45 +117,77 @@ app.get('/api/generate-2fa', async (req, res) => {
  * Verifies the OTP code using the stored secret in MongoDB.
  * If valid, marks the user's 2FA as enabled.
  */
-// Make sure you have JWT_SECRET defined in your environment variables
 
 app.post('/api/verify-2fa', async (req, res) => {
   const { email, otp } = req.body;
   if (!email || !otp) {
     return res.status(400).json({ error: 'Missing email or otp in request body' });
   }
-
   try {
-    const user = await User.findOne({ email });
+    const database = client.db("aiacard-sandbox-db");
+    const collection = database.collection("aiacard-sandox-col");
+    const user = await collection.findOne({ email });
     if (!user || !user.totpSecret) {
       return res.status(400).json({ error: 'User not found or 2FA not initialized' });
     }
-
-    // Verify the OTP code using otplib
     const isValid = otplib.authenticator.check(otp, user.totpSecret);
-    console.log(`OTP verification for ${email}:`, isValid);
-
     if (isValid) {
-      // Mark user as 2FA verified
-      user.twoFAEnabled = true;
-      user.isGAVerified = true;  // Set our GA verification flag
-      await user.save();
-
-      // Generate a new token with updated user info
+      await collection.updateOne({ email }, { $set: { twoFAEnabled: true, isGAVerified: true } });
+      const updatedUser = await collection.findOne({ email });
       const tokenPayload = {
-        email: user.email,
-        // Include any additional user fields you want in the token
-        isGAVerified: true,
+        email: updatedUser.email,
+        isGAVerified: updatedUser.isGAVerified,
       };
       const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, { expiresIn: '1h' });
-
-      return res.json({ valid: true, token, user });
+      return res.json({ valid: true, token, user: updatedUser });
     } else {
       return res.json({ valid: false, message: 'Invalid OTP' });
     }
   } catch (error) {
-    console.error('Error verifying OTP:', error);
     res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
+app.post('/api/reset-2fa', async (req, res) => {
+  const { email } = req.body;
+  if (!email) {
+    return res.status(400).json({ error: 'Missing email parameter' });
+  }
+  try {
+    const database = client.db("aiacard-sandbox-db");
+    const collection = database.collection("aiacard-sandox-col");
+    const user = await collection.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    const newSecret = otplib.authenticator.generateSecret();
+    await collection.updateOne({ email }, { 
+      $set: { totpSecret: newSecret, twoFAEnabled: false, isGAVerified: false } 
+    });
+    res.json({ success: true, totpSecret: newSecret });
+  } catch (err) {
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// Endpoint to update the user's biometrics preference
+app.post('/api/update-biometrics', async (req, res) => {
+  const { email, biometricsEnabled } = req.body;
+  if (!email || typeof biometricsEnabled !== 'boolean') {
+    return res.status(400).json({ error: 'Missing or invalid parameters' });
+  }
+  try {
+    const database = client.db("aiacard-sandbox-db");
+    const collection = database.collection("aiacard-sandox-col");
+    const updateResult = await collection.updateOne({ email }, { $set: { biometricsEnabled } });
+    if (updateResult.modifiedCount > 0) {
+      res.json({ success: true, biometricsEnabled });
+    } else {
+      res.status(404).json({ error: 'User not found or update failed' });
+    }
+  } catch (err) {
+    console.error("Error updating biometrics:", err);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -542,6 +571,7 @@ app.post('/register', async (req, res) => {
       otp,
       otpExpiry,
       otpVerified: false,
+      isGAVerified: false,  // Explicitly include GA flag (false by default)
     });
 
     console.log(`📩 Generated OTP for ${email}: ${otp}`);
@@ -597,6 +627,7 @@ app.post('/verify-otp', async (req, res) => {
         country: user.country,
         referralId: user.referralId,
         holderId: user.holderId,
+        isGAVerified: false, // explicitly include GA flag
       }
     });
   } catch (error) {
@@ -742,6 +773,7 @@ app.post('/verify-login-otp', async (req, res) => {
         country: user.country,
         referralId: user.referralId,
         holderId: user.holderId,
+        isGAVerified: user.isGAVerified,  // Explicitly include GA flag
       }
     });
   } catch (error) {
@@ -1446,7 +1478,6 @@ app.post('/resend-change-phone-otp', async (req, res) => {
 });
 
 // Add this new endpoint at an appropriate place in your server.js file
-
 app.post('/create-zendesk-ticket', async (req, res) => {
   try {
     const { subject, message, requesterName, requesterEmail } = req.body;
@@ -1455,9 +1486,9 @@ app.post('/create-zendesk-ticket', async (req, res) => {
     }
     
     // Zendesk credentials – ensure these are correct!
-    const zendeskSubdomain = 'aianalysisexchange';
-    const zendeskEmail = 'faz@aianalysis.co.uk';
-    const zendeskApiToken = 'bPl2uEbxtaQVujdukRuV2OTLF7OC9zqcrwwRlAdR';
+    const zendeskSubdomain = process.env.ZENDESK_SUBDOMAIN;
+    const zendeskEmail = process.env.ZENDESK_EMAIL;
+    const zendeskApiToken = process.env.ZENDESK_TOKEN;
     
     // For testing, you might remove the async flag:
     const zendeskEndpoint = 'tickets.json';
@@ -1675,3 +1706,4 @@ const server = app.listen(port, '0.0.0.0', () => {
 server.on('error', (err) => {
   console.error('Server error:', err);
 });
+
