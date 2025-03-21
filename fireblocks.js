@@ -1,6 +1,6 @@
 const { FireblocksSDK } = require('fireblocks-sdk');
 
-// Define your PEM-formatted private key as a string literal.
+// Instead of reading from a file, define your PEM-formatted private key as a string literal.
 const FIREBLOCKS_PRIVATE_KEY = `-----BEGIN PRIVATE KEY-----
 MIIJQQIBADANBgkqhkiG9w0BAQEFAASCCSswggknAgEAAoICAQDQr64LSXNy6GFM
 gIaMEFY++k0cKFsEdAjc66+1Cdi/ZkiB2PfC3/y562X4XiAWVK1ZgIgvW0hxr7bb
@@ -55,37 +55,20 @@ y3sgvpDI1ZDFLNXDH7N5AYWUZZ79
 -----END PRIVATE KEY-----`;
 
 const API_KEY = process.env.FIREBLOCKS_API_KEY;
+const baseUrl = "https://sandbox-api.fireblocks.io";
 
-// Use an options object with the environment set to 'sandbox'.
-// This will cause the SDK to use the default sandbox API URL (which is "https://sandbox-api.fireblocks.io/v1").
+// Options for the SDK. You might also try explicitly setting a base URL property if the SDK supports it.
 const options = {
   environment: 'sandbox'
 };
 
-// Instantiate the Fireblocks SDK client using the options object.
-const fireblocksClient = new FireblocksSDK(FIREBLOCKS_PRIVATE_KEY, API_KEY, options);
-
-// Patch the createVaultAccount method to ensure payload flattening.
-// Instead of accessing the axiosInstance (which might be undefined), call the original method.
-const originalCreateVaultAccount = fireblocksClient.createVaultAccount.bind(fireblocksClient);
-fireblocksClient.createVaultAccount = async function(accountData) {
-  // Construct a payload exactly as expected by the Fireblocks API.
-  const payload = {
-    name: accountData.name, // should be a string
-    hiddenOnUI: accountData.hiddenOnUI,
-    customerRefId: accountData.customerRefId,
-    autoFuel: accountData.autoFuel,
-    vaultType: accountData.vaultType,
-    autoAssign: accountData.autoAssign
-  };
-  // Call the original method with the flattened payload.
-  return originalCreateVaultAccount(payload);
-};
+// Instantiate the Fireblocks SDK client
+const fireblocksClient = new FireblocksSDK(FIREBLOCKS_PRIVATE_KEY, API_KEY, baseUrl);
 
 module.exports = {
   /**
    * Creates a new vault account using the Fireblocks SDK.
-   * @param {object} accountData - e.g., { name: string, hiddenOnUI: boolean, customerRefId: string, autoFuel: boolean, vaultType: string, autoAssign: boolean }
+   * @param {object} accountData - e.g., { name, hiddenOnUI, customerRefId, autoFuel, vaultType, autoAssign }
    * @returns {Promise<object>} - The Fireblocks response.
    */
   createVaultAccount: async function(accountData) {
