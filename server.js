@@ -1457,7 +1457,7 @@ app.post('/create-zendesk-ticket', async (req, res) => {
     
     // Zendesk credentials (you can also load these from environment variables)
     const zendeskSubdomain = 'aianalysisexchange';
-    const zendeskEmail = 'faz@aianalysis.o.uk';
+    const zendeskEmail = 'faz@aianalysis.co.uk';
     const zendeskApiToken = 'bPl2uEbxtaQVujdukRuV2OTLF7OC9zqcrwwRlAdR';
     
     // Use asynchronous ticket creation by adding ?async=true to the endpoint
