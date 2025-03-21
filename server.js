@@ -133,21 +133,21 @@ app.post('/api/verify-2fa', async (req, res) => {
       return res.status(400).json({ error: 'User not found or 2FA not initialized' });
     }
 
-    // Verify the OTP code using otplib
+    // Verify the OTP code using otplib.
     const isValid = otplib.authenticator.check(otp, user.totpSecret);
     console.log(`OTP verification for ${email}:`, isValid);
 
     if (isValid) {
-      // Mark user as 2FA verified
+      // Mark user as 2FA verified.
       user.twoFAEnabled = true;
-      user.isGAVerified = true;  // Set our GA verification flag
+      user.isGAVerified = true;
       await user.save();
 
-      // Generate a new token with updated user info
+      // Generate a new token with updated user info.
       const tokenPayload = {
         email: user.email,
-        // Include any additional user fields you want in the token
         isGAVerified: true,
+        // ... include other necessary user properties if needed
       };
       const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, { expiresIn: '1h' });
 
