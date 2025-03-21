@@ -1457,8 +1457,8 @@ app.post('/create-zendesk-ticket', async (req, res) => {
     
     // Zendesk credentials (you can also load these from environment variables)
     const zendeskSubdomain = 'aianalysisexchange';
-    const zendeskEmail = 'info@aianalysis.group';
-    const zendeskApiToken = 'cAab9YFtbmFEdE7h29Z4p46oHltjkzrE8Co50K9n';
+    const zendeskEmail = 'faz@aianalysis.o.uk';
+    const zendeskApiToken = 'bPl2uEbxtaQVujdukRuV2OTLF7OC9zqcrwwRlAdR';
     
     // Use asynchronous ticket creation by adding ?async=true to the endpoint
     const zendeskEndpoint = 'tickets.json?async=true';
@@ -1477,6 +1477,9 @@ app.post('/create-zendesk-ticket', async (req, res) => {
       },
     };
 
+    console.log('Using Zendesk endpoint:', url);
+    console.log('Encoded Auth Header (masked):', encodedAuth.substring(0, 10) + '...'); // Masked for security
+
     const response = await fetch(url, {
       method: "POST",
       headers: {
@@ -1485,6 +1488,10 @@ app.post('/create-zendesk-ticket', async (req, res) => {
       },
       body: JSON.stringify(payload),
     });
+
+    console.log('Zendesk response status:', response.status);
+    console.log('Zendesk response data:', data);
+
 
     const data = await response.json();
     if (response.status === 202) {
