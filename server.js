@@ -120,34 +120,42 @@ app.get('/api/generate-2fa', async (req, res) => {
  * Verifies the OTP code using the stored secret in MongoDB.
  * If valid, marks the user's 2FA as enabled.
  */
+const jwt = require('jsonwebtoken');
+// Make sure you have JWT_SECRET defined in your environment variables
+
 app.post('/api/verify-2fa', async (req, res) => {
   const { email, otp } = req.body;
-  console.log('Received /api/verify-2fa request with email:', email, 'and otp:', otp);
-
   if (!email || !otp) {
-    console.error('Missing email or otp in request body');
     return res.status(400).json({ error: 'Missing email or otp in request body' });
   }
 
   try {
     const user = await User.findOne({ email });
-    console.log('User found for verification:', user);
     if (!user || !user.totpSecret) {
-      console.error('User not found or 2FA not initialized for email:', email);
       return res.status(400).json({ error: 'User not found or 2FA not initialized' });
     }
 
-    // Verify the OTP code.
+    // Verify the OTP code using otplib
     const isValid = otplib.authenticator.check(otp, user.totpSecret);
     console.log(`OTP verification for ${email}:`, isValid);
 
     if (isValid) {
+      // Mark user as 2FA verified
       user.twoFAEnabled = true;
+      user.isGAVerified = true;  // Set our GA verification flag
       await user.save();
-      console.log('User updated with twoFAEnabled:', user);
-      return res.json({ valid: true });
+
+      // Generate a new token with updated user info
+      const tokenPayload = {
+        email: user.email,
+        // Include any additional user fields you want in the token
+        isGAVerified: true,
+      };
+      const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, { expiresIn: '1h' });
+
+      return res.json({ valid: true, token, user });
     } else {
-      return res.json({ valid: false });
+      return res.json({ valid: false, message: 'Invalid OTP' });
     }
   } catch (error) {
     console.error('Error verifying OTP:', error);
