@@ -55,15 +55,14 @@ y3sgvpDI1ZDFLNXDH7N5AYWUZZ79
 -----END PRIVATE KEY-----`;
 
 const API_KEY = process.env.FIREBLOCKS_API_KEY;
-const baseUrl = "https://sandbox-api.fireblocks.io";
 
 // Options for the SDK. You might also try explicitly setting a base URL property if the SDK supports it.
 const options = {
-  environment: 'sandbox'
+  baseUrl: "https://sandbox-api.fireblocks.io"
 };
 
 // Instantiate the Fireblocks SDK client
-const fireblocksClient = new FireblocksSDK(FIREBLOCKS_PRIVATE_KEY, API_KEY, baseUrl);
+const fireblocksClient = new FireblocksSDK(FIREBLOCKS_PRIVATE_KEY, API_KEY, options);
 
 module.exports = {
   /**
