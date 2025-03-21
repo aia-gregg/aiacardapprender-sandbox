@@ -1449,22 +1449,25 @@ app.post('/resend-change-phone-otp', async (req, res) => {
 
 app.post('/create-zendesk-ticket', async (req, res) => {
   try {
-    // Expecting these fields from the client:
     const { subject, message, requesterName, requesterEmail } = req.body;
     if (!subject || !message || !requesterName || !requesterEmail) {
       return res.status(400).json({ success: false, message: "Missing required fields" });
     }
     
-    // Zendesk credentials (you can also load these from environment variables)
+    // Zendesk credentials – ensure these are correct!
     const zendeskSubdomain = 'aianalysisexchange';
     const zendeskEmail = 'faz@aianalysis.co.uk';
     const zendeskApiToken = 'bPl2uEbxtaQVujdukRuV2OTLF7OC9zqcrwwRlAdR';
     
-    // Use asynchronous ticket creation by adding ?async=true to the endpoint
-    const zendeskEndpoint = 'tickets.json?async=true';
+    // For testing, you might remove the async flag:
+    const zendeskEndpoint = 'tickets.json';
     const url = `https://${zendeskSubdomain}.zendesk.com/api/v2/${zendeskEndpoint}`;
+    
     const auth = `${zendeskEmail}/token:${zendeskApiToken}`;
     const encodedAuth = Buffer.from(auth).toString('base64');
+
+    console.log('Using Zendesk endpoint:', url);
+    console.log('Encoded Auth Header (masked):', encodedAuth.substring(0, 10) + '...');
 
     const payload = {
       ticket: {
@@ -1477,9 +1480,6 @@ app.post('/create-zendesk-ticket', async (req, res) => {
       },
     };
 
-    console.log('Using Zendesk endpoint:', url);
-    console.log('Encoded Auth Header (masked):', encodedAuth.substring(0, 10) + '...'); // Masked for security
-
     const response = await fetch(url, {
       method: "POST",
       headers: {
@@ -1489,15 +1489,15 @@ app.post('/create-zendesk-ticket', async (req, res) => {
       body: JSON.stringify(payload),
     });
 
+    // Rename the parsed JSON response to avoid naming conflicts:
+    const zendeskData = await response.json();
     console.log('Zendesk response status:', response.status);
-    console.log('Zendesk response data:', data);
+    console.log('Zendesk response data:', zendeskData);
 
-
-    const data = await response.json();
-    if (response.status === 202) {
-      return res.json({ success: true, message: "Ticket creation accepted", data });
+    if (response.status === 202 || response.status === 200) {
+      return res.json({ success: true, message: "Ticket creation accepted", data: zendeskData });
     } else {
-      return res.status(response.status).json({ success: false, message: "Ticket creation failed", data });
+      return res.status(response.status).json({ success: false, message: "Ticket creation failed", data: zendeskData });
     }
   } catch (error) {
     console.error("Error creating Zendesk ticket:", error);
