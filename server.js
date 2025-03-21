@@ -185,19 +185,26 @@ app.post('/api/reset-2fa', async (req, res) => {
   }
 });
 
-// Ensure your User model includes a field for biometrics preference (e.g., biometricsEnabled).
+// Endpoint to update the user's biometrics preference
 app.post('/api/update-biometrics', async (req, res) => {
   const { email, biometricsEnabled } = req.body;
+
+  // Validate input
   if (!email || typeof biometricsEnabled !== 'boolean') {
     return res.status(400).json({ error: 'Missing or invalid parameters' });
   }
+
   try {
-    let user = await User.findOne({ email });
+    // Find the user by email
+    const user = await User.findOne({ email });
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
+
+    // Update the biometricsEnabled field
     user.biometricsEnabled = biometricsEnabled;
     await user.save();
+
     res.json({ success: true, biometricsEnabled });
   } catch (err) {
     console.error("Error updating biometrics:", err);
