@@ -161,6 +161,50 @@ app.post('/api/verify-2fa', async (req, res) => {
   }
 });
 
+app.post('/api/reset-2fa', async (req, res) => {
+  const { email } = req.body;
+  if (!email) {
+    return res.status(400).json({ error: 'Missing email parameter' });
+  }
+  try {
+    let user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    // Generate a new secret for TOTP.
+    const newSecret = otplib.authenticator.generateSecret();
+    user.totpSecret = newSecret;
+    // Optionally, disable 2FA until the user sets it up again.
+    user.twoFAEnabled = false;
+    user.isGAVerified = false;
+    await user.save();
+    res.json({ success: true, totpSecret: newSecret });
+  } catch (err) {
+    console.error("Error resetting 2FA:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// Ensure your User model includes a field for biometrics preference (e.g., biometricsEnabled).
+app.post('/api/update-biometrics', async (req, res) => {
+  const { email, biometricsEnabled } = req.body;
+  if (!email || typeof biometricsEnabled !== 'boolean') {
+    return res.status(400).json({ error: 'Missing or invalid parameters' });
+  }
+  try {
+    let user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    user.biometricsEnabled = biometricsEnabled;
+    await user.save();
+    res.json({ success: true, biometricsEnabled });
+  } catch (err) {
+    console.error("Error updating biometrics:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // Helper: Generate a 4-digit OTP
 function generateOTP() {
   return Math.floor(1000 + Math.random() * 9000).toString();
