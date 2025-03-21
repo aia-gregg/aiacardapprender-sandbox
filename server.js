@@ -63,7 +63,7 @@ const userSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
   totpSecret: { type: String },
   twoFAEnabled: { type: Boolean, default: false },
-  // isGAVerified: { type: Boolean, default: false },  // Ensure this is included
+  isGAVerified: { type: Boolean, default: false },  // Ensure this is included
   biometricsEnabled: { type: Boolean, default: false },
   // ...other fields
 });
@@ -146,7 +146,7 @@ app.post('/api/verify-2fa', async (req, res) => {
 
       const tokenPayload = {
         email: savedUser.email,
-        // isGAVerified: savedUser.isGAVerified,
+        isGAVerified: savedUser.isGAVerified,
       };
       const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, { expiresIn: '1h' });
 
@@ -591,7 +591,7 @@ app.post('/register', async (req, res) => {
       otp,
       otpExpiry,
       otpVerified: false,
-      // isGAVerified: false,  // Explicitly include GA flag (false by default)
+      isGAVerified: false,  // Explicitly include GA flag (false by default)
     });
 
     console.log(`📩 Generated OTP for ${email}: ${otp}`);
@@ -647,7 +647,7 @@ app.post('/verify-otp', async (req, res) => {
         country: user.country,
         referralId: user.referralId,
         holderId: user.holderId,
-        // isGAVerified: false, // explicitly include GA flag
+        isGAVerified: false, // explicitly include GA flag
       }
     });
   } catch (error) {
@@ -793,7 +793,7 @@ app.post('/verify-login-otp', async (req, res) => {
         country: user.country,
         referralId: user.referralId,
         holderId: user.holderId,
-        // isGAVerified: user.isGAVerified,  // Explicitly include GA flag
+        isGAVerified: user.isGAVerified,  // Explicitly include GA flag
       }
     });
   } catch (error) {
