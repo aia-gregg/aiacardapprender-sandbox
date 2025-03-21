@@ -63,12 +63,26 @@ const options = {
 };
 
 // Instantiate the Fireblocks SDK client
-const fireblocksClient = new FireblocksSDK(FIREBLOCKS_PRIVATE_KEY, API_KEY, baseUrl);
+const fireblocksClient = new FireblocksSDK(FIREBLOCKS_PRIVATE_KEY, API_KEY, baseUrl);// Patch the createVaultAccount method to ensure payload flattening.
+const originalCreateVaultAccount = fireblocksClient.createVaultAccount.bind(fireblocksClient);
+fireblocksClient.createVaultAccount = async function(accountData) {
+  // Construct a payload exactly as expected by the Fireblocks API.
+  const payload = {
+    name: accountData.name, // should be a string
+    hiddenOnUI: accountData.hiddenOnUI,
+    customerRefId: accountData.customerRefId,
+    autoFuel: accountData.autoFuel,
+    vaultType: accountData.vaultType,
+    autoAssign: accountData.autoAssign
+  };
+  // Call the underlying axios instance directly with the flattened payload.
+  return this.axiosInstance.post('/vault/accounts', payload);
+};
 
 module.exports = {
   /**
    * Creates a new vault account using the Fireblocks SDK.
-   * @param {object} accountData - e.g., { name, hiddenOnUI, customerRefId, autoFuel, vaultType, autoAssign }
+   * @param {object} accountData - e.g., { name: string, hiddenOnUI: boolean, customerRefId: string, autoFuel: boolean, vaultType: string, autoAssign: boolean }
    * @returns {Promise<object>} - The Fireblocks response.
    */
   createVaultAccount: async function(accountData) {
