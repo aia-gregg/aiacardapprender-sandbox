@@ -63,9 +63,6 @@ const userSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
   totpSecret: { type: String },
   twoFAEnabled: { type: Boolean, default: false },
-  isGAVerified: { type: Boolean, default: false },  // Ensure this is included
-  biometricsEnabled: { type: Boolean, default: false },
-  // ...other fields
 });
 
 const User = mongoose.model('User', userSchema);
@@ -123,6 +120,8 @@ app.get('/api/generate-2fa', async (req, res) => {
  * Verifies the OTP code using the stored secret in MongoDB.
  * If valid, marks the user's 2FA as enabled.
  */
+const jwt = require('jsonwebtoken');
+// Make sure you have JWT_SECRET defined in your environment variables
 
 app.post('/api/verify-2fa', async (req, res) => {
   const { email, otp } = req.body;
@@ -136,78 +135,31 @@ app.post('/api/verify-2fa', async (req, res) => {
       return res.status(400).json({ error: 'User not found or 2FA not initialized' });
     }
 
+    // Verify the OTP code using otplib
     const isValid = otplib.authenticator.check(otp, user.totpSecret);
     console.log(`OTP verification for ${email}:`, isValid);
 
     if (isValid) {
+      // Mark user as 2FA verified
       user.twoFAEnabled = true;
-      user.isGAVerified = true;
-      const savedUser = await user.save();
+      user.isGAVerified = true;  // Set our GA verification flag
+      await user.save();
 
+      // Generate a new token with updated user info
       const tokenPayload = {
-        email: savedUser.email,
-        isGAVerified: savedUser.isGAVerified,
+        email: user.email,
+        // Include any additional user fields you want in the token
+        isGAVerified: true,
       };
       const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, { expiresIn: '1h' });
 
-      return res.json({ valid: true, token, user: savedUser });
+      return res.json({ valid: true, token, user });
     } else {
       return res.json({ valid: false, message: 'Invalid OTP' });
     }
   } catch (error) {
     console.error('Error verifying OTP:', error);
     res.status(500).json({ error: 'Internal server error', details: error.message });
-  }
-});
-
-app.post('/api/reset-2fa', async (req, res) => {
-  const { email } = req.body;
-  if (!email) {
-    return res.status(400).json({ error: 'Missing email parameter' });
-  }
-  try {
-    let user = await User.findOne({ email });
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    // Generate a new secret for TOTP.
-    const newSecret = otplib.authenticator.generateSecret();
-    user.totpSecret = newSecret;
-    // Optionally, disable 2FA until the user sets it up again.
-    user.twoFAEnabled = false;
-    user.isGAVerified = false;
-    await user.save();
-    res.json({ success: true, totpSecret: newSecret });
-  } catch (err) {
-    console.error("Error resetting 2FA:", err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
-
-// Endpoint to update the user's biometrics preference
-app.post('/api/update-biometrics', async (req, res) => {
-  const { email, biometricsEnabled } = req.body;
-
-  // Validate input
-  if (!email || typeof biometricsEnabled !== 'boolean') {
-    return res.status(400).json({ error: 'Missing or invalid parameters' });
-  }
-
-  try {
-    // Find the user by email
-    const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    // Update the biometricsEnabled field
-    user.biometricsEnabled = biometricsEnabled;
-    await user.save();
-
-    res.json({ success: true, biometricsEnabled });
-  } catch (err) {
-    console.error("Error updating biometrics:", err);
-    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -591,7 +543,6 @@ app.post('/register', async (req, res) => {
       otp,
       otpExpiry,
       otpVerified: false,
-      isGAVerified: false,  // Explicitly include GA flag (false by default)
     });
 
     console.log(`📩 Generated OTP for ${email}: ${otp}`);
@@ -647,7 +598,6 @@ app.post('/verify-otp', async (req, res) => {
         country: user.country,
         referralId: user.referralId,
         holderId: user.holderId,
-        isGAVerified: false, // explicitly include GA flag
       }
     });
   } catch (error) {
@@ -793,7 +743,6 @@ app.post('/verify-login-otp', async (req, res) => {
         country: user.country,
         referralId: user.referralId,
         holderId: user.holderId,
-        isGAVerified: user.isGAVerified,  // Explicitly include GA flag
       }
     });
   } catch (error) {
@@ -1720,4 +1669,3 @@ const server = app.listen(port, '0.0.0.0', () => {
 server.on('error', (err) => {
   console.error('Server error:', err);
 });
-
