@@ -136,25 +136,21 @@ app.post('/api/verify-2fa', async (req, res) => {
       return res.status(400).json({ error: 'User not found or 2FA not initialized' });
     }
 
-    // Verify the OTP code using otplib.
     const isValid = otplib.authenticator.check(otp, user.totpSecret);
     console.log(`OTP verification for ${email}:`, isValid);
 
     if (isValid) {
-      // Mark user as 2FA verified.
       user.twoFAEnabled = true;
-      user.isGAVerified = true;  // Set GA flag to true
-      await user.save();
+      user.isGAVerified = true;
+      const savedUser = await user.save();
 
-      // Generate a new token with updated user info.
       const tokenPayload = {
-        email: user.email,
-        isGAVerified: true,
-        // ... include other necessary user properties if needed
+        email: savedUser.email,
+        isGAVerified: savedUser.isGAVerified,
       };
       const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, { expiresIn: '1h' });
 
-      return res.json({ valid: true, token, user });
+      return res.json({ valid: true, token, user: savedUser });
     } else {
       return res.json({ valid: false, message: 'Invalid OTP' });
     }
@@ -595,6 +591,7 @@ app.post('/register', async (req, res) => {
       otp,
       otpExpiry,
       otpVerified: false,
+      isGAVerified: false,  // Explicitly include GA flag (false by default)
     });
 
     console.log(`📩 Generated OTP for ${email}: ${otp}`);
@@ -650,6 +647,7 @@ app.post('/verify-otp', async (req, res) => {
         country: user.country,
         referralId: user.referralId,
         holderId: user.holderId,
+        isGAVerified: false, // explicitly include GA flag
       }
     });
   } catch (error) {
@@ -795,6 +793,7 @@ app.post('/verify-login-otp', async (req, res) => {
         country: user.country,
         referralId: user.referralId,
         holderId: user.holderId,
+        isGAVerified: user.isGAVerified,  // Explicitly include GA flag
       }
     });
   } catch (error) {
