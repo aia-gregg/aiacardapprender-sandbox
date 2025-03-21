@@ -120,8 +120,6 @@ app.get('/api/generate-2fa', async (req, res) => {
  * Verifies the OTP code using the stored secret in MongoDB.
  * If valid, marks the user's 2FA as enabled.
  */
-const jwt = require('jsonwebtoken');
-// Make sure you have JWT_SECRET defined in your environment variables
 
 app.post('/api/verify-2fa', async (req, res) => {
   const { email, otp } = req.body;
