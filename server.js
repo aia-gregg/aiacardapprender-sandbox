@@ -191,9 +191,9 @@ app.post('/api/update-biometrics', async (req, res) => {
   }
 });
 
-// Helper: Generate a 4-digit OTP
+// Helper: Generate a 6-digit OTP
 function generateOTP() {
-  return Math.floor(1000 + Math.random() * 9000).toString();
+  return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
 // Function to open a card using the WasabiCard API and log orderNo to MongoDB
@@ -267,10 +267,7 @@ app.post('/openCard', async (req, res) => {
   }
 });
 
- // function generateOTP() {
-  //   return Math.floor(100000 + Math.random() * 900000).toString();
-  // }
-  // 6-digit OTP
+
 
 // Webhook endpoint for Wasabi API
 app.post('/webhook', express.json({
