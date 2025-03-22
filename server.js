@@ -207,7 +207,7 @@ async function openCard(holderId, email, aiaCardId) {
   const payload = {
     merchantOrderNo: generateMerchantOrderNo(),
     holderId: holderId,
-    cardTypeId: 111018,
+    cardTypeId: 111016,
     amount: 45,
     aiaCardId: aiaCardId, // Use the passed AIACardId (e.g., 'lite', 'pro', or 'elite')
   };
@@ -1605,7 +1605,7 @@ app.post('/create-cardholder', async (req, res) => {
         town: user.town,
         postCode: user.postCode,
         country: user.country,
-        cardTypeId: 111018,
+        cardTypeId: 111016,
         holderId: ''  // Placeholder, will be filled by the Wasabi API
       };
 
