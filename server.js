@@ -669,7 +669,7 @@ app.post('/login', async (req, res) => {
     });
 
     // Modified /login endpoint:
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       requiresOTP: true,
       message: "OTP sent for login verification.",
@@ -685,7 +685,7 @@ app.post('/login', async (req, res) => {
         country: user.country,
         referralId: user.referralId,
         holderId: user.holderId,
-        isGAVerified: user.isGAVerified,  // Will be true if the user is GA verified
+        isGAVerified: user.isGAVerified,  // This field will be true if the user is GA verified
       }
     });
   } catch (error) {
