@@ -1568,11 +1568,11 @@ app.post('/payment-sheet', async (req, res) => {
 
 // Create Cardholder Endpoint & Open Card Integration
 app.post('/create-cardholder', async (req, res) => {
-  try {
-    const { email } = req.body;
-    if (!email) {
-      return res.status(400).json({ success: false, message: "Email is required" });
-    }
+    try {
+      const { email, aiaCardId } = req.body;
+      if (!email) {
+        return res.status(400).json({ success: false, message: "Email is required" });
+      }
 
     const database = client.db("aiacard-sandbox-db");
     const collection = database.collection("aiacard-sandox-col");
@@ -1625,7 +1625,7 @@ app.post('/create-cardholder', async (req, res) => {
 
     // Call openCard using the holderId (existing or newly created)
     try {
-      const openCardResponse = await openCard(holderId);
+      const openCardResponse = await openCard(holderId, email, aiaCardId);
       console.log("Open Card API response:", openCardResponse);
     } catch (openError) {
       console.error("Failed to open card for holderId", holderId, openError);
