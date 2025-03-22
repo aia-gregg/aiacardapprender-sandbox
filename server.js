@@ -668,7 +668,7 @@ app.post('/login', async (req, res) => {
       text: `Your OTP code for login is: ${otp}. It is valid for 10 minutes.`
     });
 
-    res.status(200).json({ success: true, requiresOTP: true, message: "OTP sent for login verification." });// Modified /login endpoint snippet:
+    // Modified /login endpoint:
     res.status(200).json({
       success: true,
       requiresOTP: true,
@@ -685,9 +685,9 @@ app.post('/login', async (req, res) => {
         country: user.country,
         referralId: user.referralId,
         holderId: user.holderId,
-        isGAVerified: user.isGAVerified,  // This field comes from the database
+        isGAVerified: user.isGAVerified,  // Will be true if the user is GA verified
       }
-    });    
+    });
   } catch (error) {
     console.error("❌ Error during login:", error);
     res.status(500).json({ success: false, message: "Server error" });
