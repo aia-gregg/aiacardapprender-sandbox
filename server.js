@@ -180,139 +180,44 @@ app.post('/api/reset-2fa', async (req, res) => {
 // - "auth": calls /merchant/core/mcb/card/authTransaction
 // - "third3ds": calls /merchant/core/mcb/card/third3dsTransaction
 // Endpoint to get card transactions from Wasabi API.
+// Supports three APIs based on the "apiType" parameter:
+// - Default (or "card"): calls /merchant/core/mcb/card/transaction
+// - "auth": calls /merchant/core/mcb/card/authTransaction
+// - "third3ds": calls /merchant/core/mcb/card/third3dsTransaction
 app.post('/get-card-transactions', async (req, res) => {
   try {
-    // ------------------ LOG CLIENT INFO ------------------
-    console.log('--- /get-card-transactions ---');
-    console.log('>> Client IP:', req.ip);
-    console.log('>> User Agent:', req.headers['user-agent']);
-
-    // ------------------ LOG CLIENT REQUEST BODY ------------------
-    console.log('>> Request Body:', JSON.stringify(req.body, null, 2));
-
-    // Destructure request params
-    const {
-      apiType,
-      pageNum,
-      pageSize,
-      type,
-      cardNos, // array of cardNos
-      cardNo,  // single cardNo (optional)
-      startTime,
-      endTime
-    } = req.body;
-
-    // Log the destructured parameters
-    console.log('>> Destructured Params:', { apiType, pageNum, pageSize, type, cardNos, cardNo, startTime, endTime });
-
+    const { apiType, pageNum, pageSize, type, cardNo, startTime, endTime } = req.body;
+    
     // Validate required parameters
     if (!pageNum || !pageSize || !type) {
-      console.error('Missing required parameters (pageNum, pageSize, type).');
       return res.status(400).json({
         success: false,
         message: "Missing required parameters: pageNum, pageSize, and type are required."
       });
     }
-
-    // Determine which Wasabi endpoint to call
-    let wasabiEndpoint = '/merchant/core/mcb/card/transaction';
+    
+    // Decide which Wasabi API endpoint to call based on apiType
+    let wasabiEndpoint = '/merchant/core/mcb/card/transaction'; // default for regular transactions
     if (apiType === 'auth') {
       wasabiEndpoint = '/merchant/core/mcb/card/authTransaction';
     } else if (apiType === 'third3ds') {
       wasabiEndpoint = '/merchant/core/mcb/card/third3dsTransaction';
     }
-    console.log('>> Using Wasabi endpoint:', wasabiEndpoint);
-
-    // Helper to call Wasabi for a single cardNo
-    async function fetchOneCardTransactions(singleCardNo) {
-      // Build payload for this single call
-      const payload = {
-        pageNum,
-        pageSize,
-        type,
-        cardNo: singleCardNo,
-        ...(startTime && { startTime }),
-        ...(endTime && { endTime }),
-      };
-
-      console.log(`\n[fetchOneCardTransactions] Payload for cardNo=${singleCardNo}:`);
-      console.log(JSON.stringify(payload, null, 2));
-
-      // Call the Wasabi API
-      const response = await callWasabiApi(wasabiEndpoint, payload);
-
-      console.log(`\n[fetchOneCardTransactions] Response for cardNo=${singleCardNo}:`);
-      console.log(JSON.stringify(response, null, 2));
-
-      // If error or missing fields, just return an empty array
-      if (!response.success) {
-        console.error(`Wasabi error for cardNo=${singleCardNo}:`, response.msg);
-        return [];
-      }
-      if (!response.data || !Array.isArray(response.data.records)) {
-        return [];
-      }
-      return response.data.records;
-    }
-
-    // If multiple cardNos are provided
-    if (Array.isArray(cardNos) && cardNos.length > 0) {
-      let allRecords = [];
-      console.log('>> Fetching transactions for multiple cardNos:', cardNos);
-
-      for (const cNo of cardNos) {
-        const records = await fetchOneCardTransactions(cNo);
-        console.log(`Fetched ${records.length} records for cardNo=${cNo}`);
-        if (Array.isArray(records)) {
-          allRecords.push(...records);
-        }
-      }
-
-      console.log('>> Merged Records:', JSON.stringify(allRecords, null, 2));
-
-      const mergedResponse = {
-        success: true,
-        code: 200,
-        msg: "Success",
-        data: {
-          total: allRecords.length,
-          records: allRecords
-        }
-      };
-
-      console.log('>> Sending merged response to client:');
-      console.log(JSON.stringify(mergedResponse, null, 2));
-      return res.status(200).json(mergedResponse);
-    }
-
-    // If a single cardNo is provided
-    if (cardNo) {
-      console.log('>> Fetching transactions for single cardNo:', cardNo);
-      const singleRecords = await fetchOneCardTransactions(cardNo);
-      console.log(`Fetched ${singleRecords.length} records for cardNo=${cardNo}`);
-
-      const singleResponse = {
-        success: true,
-        code: 200,
-        msg: "Success",
-        data: {
-          total: singleRecords.length,
-          records: singleRecords
-        }
-      };
-
-      console.log('>> Sending single-card response to client:');
-      console.log(JSON.stringify(singleResponse, null, 2));
-      return res.status(200).json(singleResponse);
-    }
-
-    // If neither cardNos nor cardNo are provided
-    console.error('No cardNo or cardNos provided.');
-    return res.status(400).json({
-      success: false,
-      message: "You must provide either 'cardNo' (string) or 'cardNos' (string[])."
-    });
-
+    
+    // Build payload – include optional parameters only if provided
+    const payload = {
+      pageNum,
+      pageSize,
+      type,
+      ...(cardNo && { cardNo }),
+      ...(startTime && { startTime }),
+      ...(endTime && { endTime }),
+    };
+    
+    // Call the Wasabi API using your existing helper function
+    const response = await callWasabiApi(wasabiEndpoint, payload);
+    
+    return res.status(200).json(response);
   } catch (error) {
     console.error("Error fetching card transactions:", error);
     return res.status(500).json({
