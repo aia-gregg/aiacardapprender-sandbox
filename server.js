@@ -181,8 +181,17 @@ app.post('/api/reset-2fa', async (req, res) => {
 // - "third3ds": calls /merchant/core/mcb/card/third3dsTransaction
 app.post('/get-card-transactions', async (req, res) => {
   try {
-    const { apiType, pageNum, pageSize, type, cardNo, startTime, endTime } = req.body;
-    
+    const {
+      apiType,
+      pageNum,
+      pageSize,
+      type,
+      cardNos, // array of cardNos
+      cardNo,  // single cardNo (optional)
+      startTime,
+      endTime
+    } = req.body;
+
     // Validate required parameters
     if (!pageNum || !pageSize || !type) {
       return res.status(400).json({
@@ -190,39 +199,85 @@ app.post('/get-card-transactions', async (req, res) => {
         message: "Missing required parameters: pageNum, pageSize, and type are required."
       });
     }
-    
+
     // Decide which Wasabi API endpoint to call based on apiType
-    let wasabiEndpoint = '/merchant/core/mcb/card/transaction'; // default for regular transactions
+    let wasabiEndpoint = '/merchant/core/mcb/card/transaction'; // default
     if (apiType === 'auth') {
       wasabiEndpoint = '/merchant/core/mcb/card/authTransaction';
     } else if (apiType === 'third3ds') {
       wasabiEndpoint = '/merchant/core/mcb/card/third3dsTransaction';
     }
-    
-    // Build payload – include optional parameters only if provided
-    const payload = {
-      pageNum,
-      pageSize,
-      type,
-      ...(cardNo && { cardNo }),
-      ...(startTime && { startTime }),
-      ...(endTime && { endTime }),
-    };
-    
-    // Call the Wasabi API using your helper function
-    const response = await callWasabiApi(wasabiEndpoint, payload);
 
-    // Ensure that the response data always contains a records array
-    if (response.success) {
-      if (!response.data) {
-        response.data = {};
+    // Helper to call Wasabi for a single cardNo
+    async function fetchOneCardTransactions(singleCardNo) {
+      const payload = {
+        pageNum,
+        pageSize,
+        type,
+        cardNo: singleCardNo,
+        ...(startTime && { startTime }),
+        ...(endTime && { endTime }),
+      };
+
+      const response = await callWasabiApi(wasabiEndpoint, payload);
+
+      // If error or missing fields, just return an empty array
+      if (!response.success) {
+        console.error(`Wasabi error for cardNo=${singleCardNo}:`, response.msg);
+        return [];
       }
-      if (!Array.isArray(response.data.records)) {
-        response.data.records = [];
+      if (!response.data || !Array.isArray(response.data.records)) {
+        return [];
       }
+      return response.data.records;
     }
-    
-    return res.status(200).json(response);
+
+    // If the request has an array cardNos, handle multiple calls
+    if (Array.isArray(cardNos) && cardNos.length > 0) {
+      let allRecords = [];
+      
+      // Instead of .map().reduce(), we use a for-of loop:
+      for (const cNo of cardNos) {
+        const arr = await fetchOneCardTransactions(cNo);
+        // If arr is an array, push it
+        if (Array.isArray(arr)) {
+          for (const rec of arr) {
+            allRecords.push(rec);
+          }
+        }
+      }
+      
+      return res.status(200).json({
+        success: true,
+        code: 200,
+        msg: "Success",
+        data: {
+          total: allRecords.length,
+          records: allRecords
+        }
+      });
+    }
+
+    // Otherwise, if there's a single cardNo, do the single approach
+    if (cardNo) {
+      const singleRecords = await fetchOneCardTransactions(cardNo);
+      return res.status(200).json({
+        success: true,
+        code: 200,
+        msg: "Success",
+        data: {
+          total: singleRecords.length,
+          records: singleRecords
+        }
+      });
+    }
+
+    // If neither cardNo nor cardNos is provided, return an error
+    return res.status(400).json({
+      success: false,
+      message: "You must provide either 'cardNo' (string) or 'cardNos' (string[])",
+    });
+
   } catch (error) {
     console.error("Error fetching card transactions:", error);
     return res.status(500).json({
