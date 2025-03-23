@@ -179,20 +179,16 @@ app.post('/api/reset-2fa', async (req, res) => {
 // - Default (or "card"): calls /merchant/core/mcb/card/transaction
 // - "auth": calls /merchant/core/mcb/card/authTransaction
 // - "third3ds": calls /merchant/core/mcb/card/third3dsTransaction
+// Endpoint to get card transactions from Wasabi API.
 app.post('/get-card-transactions', async (req, res) => {
   try {
     // ------------------ LOG CLIENT INFO ------------------
-    // The IP of the client (req.ip) and user-agent (req.headers['user-agent'])
-    // If behind a proxy, ensure you have app.set('trust proxy', true) if needed.
-    const clientIp = req.ip;
-    const clientUserAgent = req.headers['user-agent'];
     console.log('--- /get-card-transactions ---');
-    console.log('>> Client info:');
-    console.log(`   IP Address: ${clientIp}`);
-    console.log(`   User Agent: ${clientUserAgent}`);
+    console.log('>> Client IP:', req.ip);
+    console.log('>> User Agent:', req.headers['user-agent']);
 
     // ------------------ LOG CLIENT REQUEST BODY ------------------
-    console.log('>> Client request body:', JSON.stringify(req.body, null, 2));
+    console.log('>> Request Body:', JSON.stringify(req.body, null, 2));
 
     // Destructure request params
     const {
@@ -205,6 +201,9 @@ app.post('/get-card-transactions', async (req, res) => {
       startTime,
       endTime
     } = req.body;
+
+    // Log the destructured parameters
+    console.log('>> Destructured Params:', { apiType, pageNum, pageSize, type, cardNos, cardNo, startTime, endTime });
 
     // Validate required parameters
     if (!pageNum || !pageSize || !type) {
@@ -236,15 +235,13 @@ app.post('/get-card-transactions', async (req, res) => {
         ...(endTime && { endTime }),
       };
 
-      // LOG EXACT data we send to Wasabi
-      console.log(`\n[fetchOneCardTransactions] (cardNo=${singleCardNo}) sending payload to Wasabi:`);
+      console.log(`\n[fetchOneCardTransactions] Payload for cardNo=${singleCardNo}:`);
       console.log(JSON.stringify(payload, null, 2));
 
       // Call the Wasabi API
       const response = await callWasabiApi(wasabiEndpoint, payload);
 
-      // LOG EXACT data Wasabi returned
-      console.log(`\nWasabi response for cardNo=${singleCardNo}:`);
+      console.log(`\n[fetchOneCardTransactions] Response for cardNo=${singleCardNo}:`);
       console.log(JSON.stringify(response, null, 2));
 
       // If error or missing fields, just return an empty array
@@ -258,16 +255,20 @@ app.post('/get-card-transactions', async (req, res) => {
       return response.data.records;
     }
 
-    // If multiple cardNos
+    // If multiple cardNos are provided
     if (Array.isArray(cardNos) && cardNos.length > 0) {
       let allRecords = [];
+      console.log('>> Fetching transactions for multiple cardNos:', cardNos);
 
       for (const cNo of cardNos) {
-        const arr = await fetchOneCardTransactions(cNo);
-        if (Array.isArray(arr)) {
-          allRecords.push(...arr);
+        const records = await fetchOneCardTransactions(cNo);
+        console.log(`Fetched ${records.length} records for cardNo=${cNo}`);
+        if (Array.isArray(records)) {
+          allRecords.push(...records);
         }
       }
+
+      console.log('>> Merged Records:', JSON.stringify(allRecords, null, 2));
 
       const mergedResponse = {
         success: true,
@@ -279,16 +280,17 @@ app.post('/get-card-transactions', async (req, res) => {
         }
       };
 
-      // LOG EXACT data we send back to the client
-      console.log('\nSending final merged response to client:');
+      console.log('>> Sending merged response to client:');
       console.log(JSON.stringify(mergedResponse, null, 2));
-
       return res.status(200).json(mergedResponse);
     }
 
-    // If single cardNo
+    // If a single cardNo is provided
     if (cardNo) {
+      console.log('>> Fetching transactions for single cardNo:', cardNo);
       const singleRecords = await fetchOneCardTransactions(cardNo);
+      console.log(`Fetched ${singleRecords.length} records for cardNo=${cardNo}`);
+
       const singleResponse = {
         success: true,
         code: 200,
@@ -299,14 +301,12 @@ app.post('/get-card-transactions', async (req, res) => {
         }
       };
 
-      // LOG EXACT data we send back to the client
-      console.log('\nSending single-card response to client:');
+      console.log('>> Sending single-card response to client:');
       console.log(JSON.stringify(singleResponse, null, 2));
-
       return res.status(200).json(singleResponse);
     }
 
-    // If neither array nor single cardNo
+    // If neither cardNos nor cardNo are provided
     console.error('No cardNo or cardNos provided.');
     return res.status(400).json({
       success: false,
