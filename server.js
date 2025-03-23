@@ -209,8 +209,18 @@ app.post('/get-card-transactions', async (req, res) => {
       ...(endTime && { endTime }),
     };
     
-    // Call the Wasabi API using your existing helper function
+    // Call the Wasabi API using your helper function
     const response = await callWasabiApi(wasabiEndpoint, payload);
+
+    // Ensure that the response data always contains a records array
+    if (response.success) {
+      if (!response.data) {
+        response.data = {};
+      }
+      if (!Array.isArray(response.data.records)) {
+        response.data.records = [];
+      }
+    }
     
     return res.status(200).json(response);
   } catch (error) {
@@ -222,7 +232,6 @@ app.post('/get-card-transactions', async (req, res) => {
     });
   }
 });
-
 
 // Endpoint to update the user's biometrics preference
 app.post('/api/update-biometrics', async (req, res) => {
