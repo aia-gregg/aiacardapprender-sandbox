@@ -217,6 +217,15 @@ app.post('/get-card-transactions', async (req, res) => {
     // Call the Wasabi API using your existing helper function
     const response = await callWasabiApi(wasabiEndpoint, payload);
     
+    // Deduplicate transactions by orderNo if response is successful
+    if (response.success && response.data && Array.isArray(response.data.records)) {
+      const uniqueRecords = Array.from(
+        new Map(response.data.records.map(item => [item.orderNo, item])).values()
+      );
+      response.data.records = uniqueRecords;
+      response.data.total = uniqueRecords.length;
+    }
+    
     return res.status(200).json(response);
   } catch (error) {
     console.error("Error fetching card transactions:", error);
