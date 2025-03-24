@@ -281,7 +281,7 @@ async function openCard(holderId, email, aiaCardId) {
 
   try {
     const response = await callWasabiApi('/merchant/core/mcb/card/openCard', payload);
-    console.log('Card opened successfully:', response);
+    // console.log('Card opened successfully:', response);
 
     // Assuming response.data is an array with at least one element containing orderNo
     let orderNo = null;
@@ -308,7 +308,7 @@ async function openCard(holderId, email, aiaCardId) {
       );
 
       if (updateResult.modifiedCount > 0) {
-        console.log(`User with holderId ${holderId} updated with orderNo: ${orderNo} and ${cardAIAField}: ${aiaCardId}`);
+        // console.log(`User with holderId ${holderId} updated with orderNo: ${orderNo} and ${cardAIAField}: ${aiaCardId}`);
       } else {
         console.error(`Failed to update user with holderId ${holderId} with orderNo: ${orderNo}`);
       }
@@ -350,12 +350,12 @@ app.post('/webhook', express.json({
       data: null,
     };
     res.status(200).json(responsePayload);
-    console.log('Webhook immediately acknowledged with response:', responsePayload);
+    // console.log('Webhook immediately acknowledged with response:', responsePayload);
 
     // Process the webhook asynchronously so as not to delay the response
     setImmediate(async () => {
-      console.log('Webhook raw payload:', req.rawBody);
-      console.log('Webhook parsed payload:', req.body);
+      // console.log('Webhook raw payload:', req.rawBody);
+      // console.log('Webhook parsed payload:', req.body);
 
       // Check for a signature header if provided
       const signature = req.headers['x-signature'];
@@ -364,8 +364,8 @@ app.post('/webhook', express.json({
           .createHmac('sha256', process.env.WASABI_WEBHOOK_SECRET)
           .update(req.rawBody)
           .digest('hex');
-        console.log('Computed signature:', computedSignature);
-        console.log('Received signature:', signature);
+        // console.log('Computed signature:', computedSignature);
+        // console.log('Received signature:', signature);
         if (computedSignature !== signature) {
           console.error('Signature verification failed.');
           return;
@@ -376,7 +376,7 @@ app.post('/webhook', express.json({
 
       // Extract common parameters from the webhook payload
       const { orderNo, cardNo, type, transactionTime } = req.body;
-      console.log('Extracted orderNo:', orderNo, 'cardNo:', cardNo, 'type:', type);
+      // console.log('Extracted orderNo:', orderNo, 'cardNo:', cardNo, 'type:', type);
       if (!orderNo || !cardNo) {
         console.error('Missing orderNo or cardNo in webhook payload.');
         return;
@@ -396,7 +396,7 @@ app.post('/webhook', express.json({
             transactionTime,
             ...req.body,
           });
-          console.log(`Updated transaction cache for card ${cardNo}:`, transactionCache[cardNo]);
+          // console.log(`Updated transaction cache for card ${cardNo}:`, transactionCache[cardNo]);
         }
         // Process the card creation event: update the DB
         try {
@@ -405,7 +405,7 @@ app.post('/webhook', express.json({
 
           // Lookup the user by orderNo
           const user = await collection.findOne({ orderNo: orderNo });
-          console.log('User found by orderNo:', user);
+          // console.log('User found by orderNo:', user);
           if (!user) {
             console.error(`No user found with orderNo: ${orderNo}`);
             return;
@@ -425,13 +425,11 @@ app.post('/webhook', express.json({
               $inc: { activeCards: 1 },
             }
           );
-          console.log(`Attempting to set field ${cardFieldName} with value: ${cardNo} and reset orderNo.`);
-          console.log('Update result:', updateResult);
+          // console.log(`Attempting to set field ${cardFieldName} with value: ${cardNo} and reset orderNo.`);
+          // console.log('Update result:', updateResult);
 
           if (updateResult.modifiedCount > 0) {
-            console.log(
-              `User ${user.email} updated: ${cardFieldName} set to ${cardNo}. Active cards now: ${newCardIndex}`
-            );
+            // console.log(`User ${user.email} updated: ${cardFieldName} set to ${cardNo}. Active cards now: ${newCardIndex}`);
           } else {
             console.error('Failed to update user record with new card information.');
           }
@@ -439,9 +437,9 @@ app.post('/webhook', express.json({
           console.error('Error updating MongoDB with card details:', dbError);
         }
       } else if (type === 'deposit') {
-        console.log(`Webhook event type ${type} is not recognized for processing. Skipping.`);
+        // console.log(`Webhook event type ${type} is not recognized for processing. Skipping.`);
       } else {
-        console.log(`Webhook event type ${type} is not recognized for processing. Skipping.`);
+        // console.log(`Webhook event type ${type} is not recognized for processing. Skipping.`);
       }
     });
   }
@@ -514,7 +512,7 @@ app.post('/get-active-cards', async (req, res) => {
       // Call Wasabi's API using your helper function
       const response = await callWasabiApi('/merchant/core/mcb/card/info', payload);
       // Log the raw response from Wasabi API for debugging
-      console.log('Raw response from Wasabi API for cardNo:', cardNo, response);
+      // console.log('Raw response from Wasabi API for cardNo:', cardNo, response);
       
       if (response && response.success && response.data) {
         const data = response.data;
@@ -584,7 +582,7 @@ app.post('/top-up', async (req, res) => {
     currency: "USD"
   };
 
-  console.log('Payload sent to deposit API:', JSON.stringify(depositPayload));
+  // console.log('Payload sent to deposit API:', JSON.stringify(depositPayload));
 
   try {
     // Call Wasabi deposit API using the helper function.
@@ -640,7 +638,7 @@ app.post('/merchant/core/mcb/card/freeze', async (req, res) => {
     return res.status(400).json(errorResponse);
   }
 
-  console.log("Received freeze request payload:", req.body);
+  // console.log("Received freeze request payload:", req.body);
 
   // Create the payload for Wasabi API
   const payload = { cardNo, maskedCardNumber };
@@ -648,7 +646,7 @@ app.post('/merchant/core/mcb/card/freeze', async (req, res) => {
   try {
     // Call the Wasabi Pay API endpoint for freezing the card
     const freezeResponse = await callWasabiApi('/merchant/core/mcb/card/freeze', payload);
-    console.log("Freeze response from Wasabi API:", freezeResponse);
+    // console.log("Freeze response from Wasabi API:", freezeResponse);
     res.json(freezeResponse);
   } catch (error) {
     console.error("Error freezing card:", error);
@@ -670,7 +668,7 @@ app.post('/merchant/core/mcb/card/unfreeze', async (req, res) => {
     return res.status(400).json(errorResponse);
   }
 
-  console.log("Received unfreeze request payload:", req.body);
+  // console.log("Received unfreeze request payload:", req.body);
 
   // Create the payload for Wasabi API
   const payload = { cardNo, maskedCardNumber };
@@ -678,7 +676,7 @@ app.post('/merchant/core/mcb/card/unfreeze', async (req, res) => {
   try {
     // Call the Wasabi Pay API endpoint for unfreezing the card
     const unfreezeResponse = await callWasabiApi('/merchant/core/mcb/card/unfreeze', payload);
-    console.log("Unfreeze response from Wasabi API:", unfreezeResponse);
+    // console.log("Unfreeze response from Wasabi API:", unfreezeResponse);
     res.json(unfreezeResponse);
   } catch (error) {
     console.error("Error unfreezing card:", error);
@@ -763,7 +761,7 @@ app.post('/verify-otp', async (req, res) => {
     );
 
     const token = jwt.sign({ id: user._id, email: user.email }, secretKey, { expiresIn: '1h' });
-    console.log(`✅ OTP verified for ${email}. User is now verified.`);
+    // console.log(`✅ OTP verified for ${email}. User is now verified.`);
 
     res.status(200).json({
       success: true,
@@ -928,7 +926,7 @@ app.post('/verify-login-otp', async (req, res) => {
     await collection.updateOne({ email }, { $unset: { otp: "", otpExpiry: "" } });
 
     const token = jwt.sign({ id: user._id, email: user.email }, secretKey, { expiresIn: '1h' });
-    console.log(`✅ OTP verified for ${email}. User is now logged in.`);
+    // console.log(`✅ OTP verified for ${email}. User is now logged in.`);
 
     res.status(200).json({
       success: true,
@@ -1107,7 +1105,7 @@ app.post('/verify-change-email-otp', async (req, res) => {
       { expiresIn: '1h' }
     );
 
-    console.log(`✅ Email updated from ${currentEmail} to ${newEmail} successfully. New token generated.`);
+    // console.log(`✅ Email updated from ${currentEmail} to ${newEmail} successfully. New token generated.`);
 
     res.status(200).json({
       success: true,
@@ -1244,7 +1242,7 @@ app.post('/verify-change-phone-otp', async (req, res) => {
       { expiresIn: '1h' }
     );
 
-    console.log(`✅ Phone updated from ${currentAreaCode}${currentMobile} to ${newAreaCode}${newMobile} successfully. Token regenerated.`);
+    // console.log(`✅ Phone updated from ${currentAreaCode}${currentMobile} to ${newAreaCode}${newMobile} successfully. Token regenerated.`);
 
     res.status(200).json({
       success: true,
@@ -1361,7 +1359,7 @@ app.post('/verify-change-password-otp', async (req, res) => {
         secretKey,
         { expiresIn: '1h' }
       );
-      console.log(`✅ Password updated for ${email}. New token generated.`);
+      // console.log(`✅ Password updated for ${email}. New token generated.`);
       return res.status(200).json({
         success: true,
         message: "Password updated successfully.",
@@ -1447,7 +1445,7 @@ app.post('/forgot-change-password', async (req, res) => {
         secretKey,
         { expiresIn: '1h' }
       );
-      console.log(`✅ Password updated for ${email}. New token generated.`);
+      // console.log(`✅ Password updated for ${email}. New token generated.`);
       return res.status(200).json({
         success: true,
         message: "Password updated successfully.",
@@ -1544,7 +1542,7 @@ app.post('/verify-card-details-otp', async (req, res) => {
     }
     // OTP is valid; clear the OTP fields
     await collection.updateOne({ email }, { $unset: { cardDetailsOtp: "", cardDetailsOtpExpiry: "" } });
-    console.log(`✅ Card Details OTP verified for ${email}.`);
+    // console.log(`✅ Card Details OTP verified for ${email}.`);
     res.status(200).json({ success: true, message: "OTP verified successfully." });
   } catch (error) {
     console.error("❌ Error verifying Card Details OTP:", error);
@@ -1669,8 +1667,8 @@ app.post('/create-zendesk-ticket', async (req, res) => {
     const auth = `${zendeskEmail}/token:${zendeskApiToken}`;
     const encodedAuth = Buffer.from(auth).toString('base64');
 
-    console.log('Using Zendesk endpoint:', url);
-    console.log('Encoded Auth Header (masked):', encodedAuth.substring(0, 10) + '...');
+    // console.log('Using Zendesk endpoint:', url);
+    // console.log('Encoded Auth Header (masked):', encodedAuth.substring(0, 10) + '...');
 
     const payload = {
       ticket: {
@@ -1694,8 +1692,8 @@ app.post('/create-zendesk-ticket', async (req, res) => {
 
     // Rename the parsed JSON response to avoid naming conflicts:
     const zendeskData = await response.json();
-    console.log('Zendesk response status:', response.status);
-    console.log('Zendesk response data:', zendeskData);
+    // console.log('Zendesk response status:', response.status);
+    // console.log('Zendesk response data:', zendeskData);
 
     if (response.status === 202 || response.status === 200) {
       return res.json({ success: true, message: "Ticket creation accepted", data: zendeskData });
@@ -1783,22 +1781,22 @@ app.post('/create-cardholder', async (req, res) => {
 
       // Call the Wasabi API to create a new cardholder
       const wasabiResult = await callWasabiApi("/merchant/core/mcb/card/holder/create", payload);
-      console.log("WasabiCard API response:", wasabiResult);
+      // console.log("WasabiCard API response:", wasabiResult);
 
       // Retrieve the new holderId from the API response
       holderId = wasabiResult.data.holderId;
 
       // Update the user's record with the newly created holderId
       await collection.updateOne({ email: user.email }, { $set: { holderId } });
-      console.log(`Created and updated user ${email} with holderId: ${holderId}`);
+      // console.log(`Created and updated user ${email} with holderId: ${holderId}`);
     } else {
-      console.log(`User ${email} already has holderId: ${holderId}`);
+      // console.log(`User ${email} already has holderId: ${holderId}`);
     }
 
     // Call openCard using the holderId (existing or newly created)
     try {
       const openCardResponse = await openCard(holderId, email, aiaCardId);
-      console.log("Open Card API response:", openCardResponse);
+      // console.log("Open Card API response:", openCardResponse);
     } catch (openError) {
       console.error("Failed to open card for holderId", holderId, openError);
     }
@@ -1843,7 +1841,7 @@ app.post('/card-details', async (req, res) => {
     // Call Wasabi's API using your helper function.
     // Note: The documented endpoint is '/merchant/core/mcb/card/info'
     const wasabiResponse = await callWasabiApi('/merchant/core/mcb/card/info', payload);
-    console.log("WasabiCard API card info response:", wasabiResponse);
+    // console.log("WasabiCard API card info response:", wasabiResponse);
 
     // Optionally, you could merge the stored expiry date (if needed) with the response.
     // For example, if wasabiResponse.data does not include the expiry date, you might add it:
