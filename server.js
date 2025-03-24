@@ -513,10 +513,14 @@ app.post('/get-active-cards', async (req, res) => {
 
 // New Topup/Deposit Endpoint
 app.post('/top-up', async (req, res) => {
+  // Log the entire request body to check what is being sent - DELETE
+  console.log("Received /top-up request:", req.body);
+
   const { cardNo, merchantOrderNo, amount } = req.body;
 
   // Validate required fields
   if (!cardNo || !merchantOrderNo || !amount) {
+    console.error("Validation error: Missing required fields", req.body);
     return res.status(400).json({
       success: false,
       message: 'Missing required fields: cardNo, merchantOrderNo, and amount are required.'
@@ -531,13 +535,9 @@ app.post('/top-up', async (req, res) => {
     amount: amount, // Already formatted as a string like "51.75"
     currency: "USD"
   };
-
-  // console.log('Payload sent to deposit API:', JSON.stringify(depositPayload));
+  console.log('Sending deposit payload to Wasabi:', JSON.stringify(depositPayload)); // DELETE
 
   try {
-    // 1. Log what you’re about to send - DELETE
-    console.log('Sending deposit payload to Wasabi:', JSON.stringify(depositPayload));
-
     // Call Wasabi deposit API using the helper function.
     const data = await callWasabiApi('/merchant/core/mcb/card/deposit', depositPayload);
 
