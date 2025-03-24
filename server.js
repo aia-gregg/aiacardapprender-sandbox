@@ -580,30 +580,11 @@ app.post('/top-up', async (req, res) => {
   }
 
   // Prepare payload for the Wasabi deposit API call
-  const depositPayload = {
-    cardNo,
-    merchantOrderNo,
-    amount
-  };
+  const depositPayload = { cardNo, merchantOrderNo, amount };
 
   try {
-    // Use the provided API endpoint for deposit
-    const response = await fetch(`${API_BASE_URL}/merchant/core/mcb/card/deposit`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(depositPayload)
-    });
-
-    if (!response.ok) {
-      return res.status(response.status).json({
-        success: false,
-        message: 'Deposit API call failed'
-      });
-    }
-
-    const data = await response.json();
+    // Call Wasabi deposit API using the helper function
+    const data = await callWasabiApi('/merchant/core/mcb/card/deposit', depositPayload);
 
     // Check that the deposit API returned a successful processing status
     if (data.success && data.data && data.data.status === 'processing') {
@@ -615,9 +596,7 @@ app.post('/top-up', async (req, res) => {
         orderNo: data.data.orderNo,
         status: data.data.status,
         remark: data.data.remark,
-        // Convert transactionTime from milliseconds to a Date object
         transactionTime: new Date(data.data.transactionTime),
-        // Optionally store all deposit data for reference
         details: data.data,
         createdAt: new Date() // record when the topup was saved
       };
