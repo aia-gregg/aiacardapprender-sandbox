@@ -417,15 +417,15 @@ app.post('/webhook', express.json({
           // Create a new field name, e.g., "cardNo1", "cardNo2", etc.
           const cardFieldName = `cardNo${newCardIndex}`;
 
-          // Update the user record: add the new cardNo field and increment activeCards
+          // Update the user record: add the new cardNo field, increment activeCards, and overwrite orderNo with ""
           const updateResult = await collection.updateOne(
             { _id: user._id },
             {
-              $set: { [cardFieldName]: cardNo },
+              $set: { [cardFieldName]: cardNo, orderNo: "" },
               $inc: { activeCards: 1 },
             }
           );
-          console.log(`Attempting to set field ${cardFieldName} with value: ${cardNo}`);
+          console.log(`Attempting to set field ${cardFieldName} with value: ${cardNo} and reset orderNo.`);
           console.log('Update result:', updateResult);
 
           if (updateResult.modifiedCount > 0) {
@@ -446,6 +446,7 @@ app.post('/webhook', express.json({
     });
   }
 );
+
 
 
 // // A helper function to decrypt a base64-encoded field from Wasabi using your RSA private key.
