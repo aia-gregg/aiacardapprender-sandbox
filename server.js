@@ -386,6 +386,35 @@ function decryptRSA(encryptedBase64, privateKey) {
   }
 }
 
+// Endpoint to pull actual card auth transactions from Wasabi API
+app.post('/card-auth-transactions', async (req, res) => {
+  try {
+    // Extract required and optional parameters from the request body.
+    // pageNum and pageSize are required; cardNo, type, tradeNo, startTime, and endTime are optional.
+    const { pageNum, pageSize, cardNo, type, tradeNo, startTime, endTime } = req.body;
+    
+    // Build the payload to send to Wasabi's card auth transaction API.
+    const payload = {
+      pageNum: pageNum || 1,
+      pageSize: pageSize || 10,
+      ...(cardNo && { cardNo }),
+      ...(type && { type }),
+      ...(tradeNo && { tradeNo }),
+      ...(startTime && { startTime }),
+      ...(endTime && { endTime }),
+    };
+
+    // Call Wasabi API using your existing helper function.
+    const response = await callWasabiApi('/merchant/core/mcb/card/authTransaction', payload);
+    
+    // Return the response from Wasabi's API directly to the client.
+    res.status(200).json(response);
+  } catch (error) {
+    console.error("Error fetching card auth transactions:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 // Endpoint to get active cards details for a user based on email
 app.post('/get-active-cards', async (req, res) => {
   try {
