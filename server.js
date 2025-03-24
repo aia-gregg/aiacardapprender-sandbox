@@ -337,9 +337,7 @@ app.post('/openCard', async (req, res) => {
 
 
 // Webhook endpoint for Wasabi API
-app.post(
-  '/webhook',
-  express.json({
+app.post('/webhook', express.json({
     verify: (req, res, buf) => {
       req.rawBody = buf.toString();
     },
@@ -380,6 +378,7 @@ app.post(
 
       // Extract common parameters from the webhook payload
       const { orderNo, cardNo, type, transactionTime } = req.body;
+      console.log('Extracted orderNo:', orderNo, 'cardNo:', cardNo, 'type:', type);
       if (!orderNo || !cardNo) {
         console.error('Missing orderNo or cardNo in webhook payload.');
         return;
@@ -416,6 +415,7 @@ app.post(
 
           // Lookup the user by orderNo
           const user = await collection.findOne({ orderNo: orderNo });
+          console.log('User found by orderNo:', user);
           if (!user) {
             console.error(`No user found with orderNo: ${orderNo}`);
             return;
@@ -435,6 +435,8 @@ app.post(
               $inc: { activeCards: 1 },
             }
           );
+          console.log(`Attempting to set field ${cardFieldName} with value: ${cardNo}`);
+          console.log('Update result:', updateResult);
 
           if (updateResult.modifiedCount > 0) {
             console.log(`User ${user.email} updated: ${cardFieldName} set to ${cardNo}. Active cards now: ${newCardIndex}`);
