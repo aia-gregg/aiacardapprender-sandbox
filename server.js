@@ -665,6 +665,7 @@ app.post('/register', async (req, res) => {
       otpExpiry,
       otpVerified: false,
       isGAVerified: false,  // Explicitly include GA flag (false by default)
+      activeCards: 0      // Initialize activeCards to 0
     });
 
     console.log(`📩 Generated OTP for ${email}: ${otp}`);
