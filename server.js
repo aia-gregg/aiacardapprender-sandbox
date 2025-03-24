@@ -177,20 +177,23 @@ app.post('/api/reset-2fa', async (req, res) => {
 // Endpoint to get card transactions from Wasabi API.
 app.post('/get-card-transactions', async (req, res) => {
   try {
-    const { pageNum, pageSize, type, cardNo, startTime, endTime } = req.body;
+    const { pageNum, pageSize, cardNo, startTime, endTime } = req.body;
     
-    // Validate required parameters
-    if (!pageNum || !pageSize || !type) {
+    // Force the type to "auth" since this endpoint is only for auth transactions.
+    const type = "auth";
+    
+    // Validate required parameters.
+    if (!pageNum || !pageSize || !cardNo) {
       return res.status(400).json({
         success: false,
-        message: "Missing required parameters: pageNum, pageSize, and type are required."
+        message: "Missing required parameters: pageNum, pageSize, and cardNo are required."
       });
     }
     
     // Always use the authTransaction endpoint.
     const wasabiEndpoint = '/merchant/core/mcb/card/authTransaction';
     
-    // Build payload – include optional parameters only if provided.
+    // Build payload with the forced type.
     const payload = {
       pageNum,
       pageSize,
@@ -200,14 +203,23 @@ app.post('/get-card-transactions', async (req, res) => {
       ...(endTime && { endTime }),
     };
     
-    // Call the Wasabi API using your existing helper function.
+    console.log("Calling Wasabi API at:", wasabiEndpoint);
+    console.log("Payload for WasabiCard:", JSON.stringify(payload));
+    
+    // Call the Wasabi API.
     const response = await callWasabiApi(wasabiEndpoint, payload);
     
-    // Deduplicate transactions using tradeNo as the unique identifier.
     if (response.success && response.data && Array.isArray(response.data.records)) {
+      // Deduplicate using tradeNo.
       const uniqueRecords = Array.from(
         new Map(response.data.records.map(item => [item.tradeNo, item])).values()
       );
+      
+      // Optionally remove transactionTime if you don't want to display it.
+      uniqueRecords.forEach(record => {
+         delete record.transactionTime;
+      });
+      
       response.data.records = uniqueRecords;
       response.data.total = uniqueRecords.length;
     }
