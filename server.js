@@ -579,14 +579,21 @@ app.post('/top-up', async (req, res) => {
     });
   }
 
-  // Prepare payload for the Wasabi deposit API call
-  const depositPayload = { cardNo, merchantOrderNo, amount };
+  // Prepare payload for the Wasabi deposit API call.
+  // Added "currency": "USD" as a potential required field.
+  const depositPayload = {
+    cardNo,
+    merchantOrderNo,
+    amount: amount, // Already formatted as a string like "51.75"
+    currency: "USD"
+  };
+
+  console.log('Payload sent to deposit API:', JSON.stringify(depositPayload));
 
   try {
-    // Call Wasabi deposit API using the helper function
+    // Call Wasabi deposit API using the helper function.
     const data = await callWasabiApi('/merchant/core/mcb/card/deposit', depositPayload);
 
-    // Check that the deposit API returned a successful processing status
     if (data.success && data.data && data.data.status === 'processing') {
       // Prepare topup record to save in MongoDB
       const topupRecord = {
@@ -598,17 +605,13 @@ app.post('/top-up', async (req, res) => {
         remark: data.data.remark,
         transactionTime: new Date(data.data.transactionTime),
         details: data.data,
-        createdAt: new Date() // record when the topup was saved
+        createdAt: new Date()
       };
 
-      // Get DB and Collection names from environment variables
       const dbName = process.env.MONGODB_DB_NAME_TOPUP;
       const collectionName = process.env.MONGODB_COLLECTION_TOPUP;
-
-      // Save the topup record into MongoDB
       await client.db(dbName).collection(collectionName).insertOne(topupRecord);
 
-      // Return the successful deposit response to the client
       return res.json({ success: true, data });
     } else {
       return res.status(400).json({
