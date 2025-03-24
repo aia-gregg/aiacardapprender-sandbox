@@ -567,6 +567,87 @@ app.post('/get-active-cards', async (req, res) => {
   }
 });
 
+// New Topup/Deposit Endpoint
+app.post('/top-up', async (req, res) => {
+  const { cardNo, merchantOrderNo, amount } = req.body;
+
+  // Validate required fields
+  if (!cardNo || !merchantOrderNo || !amount) {
+    return res.status(400).json({
+      success: false,
+      message: 'Missing required fields: cardNo, merchantOrderNo, and amount are required.'
+    });
+  }
+
+  // Prepare payload for the Wasabi deposit API call
+  const depositPayload = {
+    cardNo,
+    merchantOrderNo,
+    amount
+  };
+
+  try {
+    // Use the provided API endpoint for deposit
+    const response = await fetch(`${API_BASE_URL}/merchant/core/mcb/card/deposit`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(depositPayload)
+    });
+
+    if (!response.ok) {
+      return res.status(response.status).json({
+        success: false,
+        message: 'Deposit API call failed'
+      });
+    }
+
+    const data = await response.json();
+
+    // Check that the deposit API returned a successful processing status
+    if (data.success && data.data && data.data.status === 'processing') {
+      // Prepare topup record to save in MongoDB
+      const topupRecord = {
+        merchantOrderNo,
+        cardNo,
+        amount,
+        orderNo: data.data.orderNo,
+        status: data.data.status,
+        remark: data.data.remark,
+        // Convert transactionTime from milliseconds to a Date object
+        transactionTime: new Date(data.data.transactionTime),
+        // Optionally store all deposit data for reference
+        details: data.data,
+        createdAt: new Date() // record when the topup was saved
+      };
+
+      // Get DB and Collection names from environment variables
+      const dbName = process.env.MONGODB_DB_NAME_TOPUP;
+      const collectionName = process.env.MONGODB_COLLECTION_TOPUP;
+
+      // Save the topup record into MongoDB
+      await client.db(dbName).collection(collectionName).insertOne(topupRecord);
+
+      // Return the successful deposit response to the client
+      return res.json({ success: true, data });
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: 'Deposit API call did not return a processing status.',
+        data: data.data
+      });
+    }
+  } catch (error) {
+    console.error('Error in /top-up endpoint:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    });
+  }
+});
+
 // Freeze endpoint with dynamic Wasabi API call
 app.post('/merchant/core/mcb/card/freeze', async (req, res) => {
   const { cardNo, maskedCardNumber } = req.body;
