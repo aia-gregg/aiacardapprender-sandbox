@@ -335,7 +335,6 @@ app.post('/openCard', async (req, res) => {
 });
 
 
-
 // Webhook endpoint for Wasabi API
 app.post('/webhook', express.json({
     verify: (req, res, buf) => {
@@ -347,11 +346,10 @@ app.post('/webhook', express.json({
     const responsePayload = {
       success: true,
       code: 200,
-      msg: "Success",
+      msg: 'Success',
       data: null,
     };
     res.status(200).json(responsePayload);
-
     console.log('Webhook immediately acknowledged with response:', responsePayload);
 
     // Process the webhook asynchronously so as not to delay the response
@@ -384,34 +382,26 @@ app.post('/webhook', express.json({
         return;
       }
 
-      // Check if this is a transaction event by testing for transactionTime
-      if (transactionTime) {
-        // This is a transaction event (fetched directly from the transaction API)
-        // As per documentation, type "create" here represents an open card transaction event.
-        if (type === 'create') {
-          // Update in-memory cache for transactions during the login session
+      // Process card creation events (type 'create') regardless of transactionTime
+      if (type === 'create') {
+        // Optional: Update transaction cache if transactionTime exists
+        if (transactionTime) {
           if (!transactionCache[cardNo]) {
             transactionCache[cardNo] = [];
           }
-          // Here you can store only the details you need
           transactionCache[cardNo].push({
             orderNo,
             cardNo,
             type,
             transactionTime,
-            // Include other fields if needed (e.g. amount, fee, status, remark)
-            ...req.body
+            ...req.body,
           });
           console.log(`Updated transaction cache for card ${cardNo}:`, transactionCache[cardNo]);
-        } else {
-          console.log(`Received transaction event with type ${type} - not processed in cache.`);
         }
-      } 
-      // Else assume this is a card creation event
-      else if (type === 'create') {
+        // Process the card creation event: update the DB
         try {
-          const database = client.db("aiacard-sandbox-db");
-          const collection = database.collection("aiacard-sandox-col");
+          const database = client.db('aiacard-sandbox-db');
+          const collection = database.collection('aiacard-sandox-col');
 
           // Lookup the user by orderNo
           const user = await collection.findOne({ orderNo: orderNo });
@@ -439,19 +429,24 @@ app.post('/webhook', express.json({
           console.log('Update result:', updateResult);
 
           if (updateResult.modifiedCount > 0) {
-            console.log(`User ${user.email} updated: ${cardFieldName} set to ${cardNo}. Active cards now: ${newCardIndex}`);
+            console.log(
+              `User ${user.email} updated: ${cardFieldName} set to ${cardNo}. Active cards now: ${newCardIndex}`
+            );
           } else {
             console.error('Failed to update user record with new card information.');
           }
         } catch (dbError) {
           console.error('Error updating MongoDB with card details:', dbError);
         }
+      } else if (type === 'deposit') {
+        console.log(`Webhook event type ${type} is not recognized for processing. Skipping.`);
       } else {
         console.log(`Webhook event type ${type} is not recognized for processing. Skipping.`);
       }
     });
   }
 );
+
 
 // // A helper function to decrypt a base64-encoded field from Wasabi using your RSA private key.
 function decryptRSA(encryptedBase64, privateKey) {
