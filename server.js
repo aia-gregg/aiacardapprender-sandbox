@@ -535,8 +535,14 @@ app.post('/top-up', async (req, res) => {
   // console.log('Payload sent to deposit API:', JSON.stringify(depositPayload));
 
   try {
+    // 1. Log what you’re about to send - DELETE
+    console.log('Sending deposit payload to Wasabi:', JSON.stringify(depositPayload));
+
     // Call Wasabi deposit API using the helper function.
     const data = await callWasabiApi('/merchant/core/mcb/card/deposit', depositPayload);
+
+    // 3. Log the raw response - DELETE
+    console.log('Wasabi deposit API response:', JSON.stringify(data));
 
     if (data.success && data.data && data.data.status === 'processing') {
       // Prepare topup record to save in MongoDB
