@@ -174,67 +174,6 @@ app.post('/api/reset-2fa', async (req, res) => {
   }
 });
 
-// Endpoint to get card transactions from Wasabi API.
-app.post('/get-card-transactions', async (req, res) => {
-  try {
-    const { pageNum, pageSize, cardNo, startTime, endTime } = req.body;
-    
-    // Force the type to "auth" since this endpoint is only for auth transactions.
-    const type = "auth";
-    
-    // Validate required parameters.
-    if (!pageNum || !pageSize || !cardNo) {
-      return res.status(400).json({
-        success: false,
-        message: "Missing required parameters: pageNum, pageSize, and cardNo are required."
-      });
-    }
-    
-    // Always use the authTransaction endpoint.
-    const wasabiEndpoint = '/merchant/core/mcb/card/authTransaction';
-    
-    // Build payload with the forced type.
-    const payload = {
-      pageNum,
-      pageSize,
-      type,
-      ...(cardNo && { cardNo }),
-      ...(startTime && { startTime }),
-      ...(endTime && { endTime }),
-    };
-    
-    console.log("Calling Wasabi API at:", wasabiEndpoint);
-    console.log("Payload for WasabiCard:", JSON.stringify(payload));
-    
-    // Call the Wasabi API.
-    const response = await callWasabiApi(wasabiEndpoint, payload);
-    
-    if (response.success && response.data && Array.isArray(response.data.records)) {
-      // Deduplicate using tradeNo.
-      const uniqueRecords = Array.from(
-        new Map(response.data.records.map(item => [item.tradeNo, item])).values()
-      );
-      
-      // Optionally remove transactionTime if you don't want to display it.
-      uniqueRecords.forEach(record => {
-         delete record.transactionTime;
-      });
-      
-      response.data.records = uniqueRecords;
-      response.data.total = uniqueRecords.length;
-    }
-    
-    return res.status(200).json(response);
-  } catch (error) {
-    console.error("Error fetching card transactions:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Server error",
-      error: error.message,
-    });
-  }
-});
-
 // Endpoint to update the user's biometrics preference
 app.post('/api/update-biometrics', async (req, res) => {
   const { email, biometricsEnabled } = req.body;
@@ -333,7 +272,6 @@ app.post('/openCard', async (req, res) => {
 });
 
 
-// Webhook endpoint for Wasabi API
 // Webhook endpoint for Wasabi API
 app.post(
   '/webhook',
