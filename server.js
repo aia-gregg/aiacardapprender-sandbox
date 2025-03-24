@@ -411,7 +411,7 @@ app.post('/card-auth-transactions', async (req, res) => {
     const response = await callWasabiApi('/merchant/core/mcb/card/authTransaction', payload);
     
     // Log the response received from Wasabi API
-    console.log("Received response from Wasabi API:", JSON.stringify(response));
+    // console.log("Received response from Wasabi API:", JSON.stringify(response));
 
     // Return the response from Wasabi's API directly to the client.
     res.status(200).json(response);
