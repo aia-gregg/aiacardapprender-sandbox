@@ -404,9 +404,15 @@ app.post('/card-auth-transactions', async (req, res) => {
       ...(endTime && { endTime }),
     };
 
+    // Log the payload being sent
+    console.log("Sending payload to Wasabi API:", JSON.stringify(payload));
+
     // Call Wasabi API using your existing helper function.
     const response = await callWasabiApi('/merchant/core/mcb/card/authTransaction', payload);
     
+    // Log the response received from Wasabi API
+    console.log("Received response from Wasabi API:", JSON.stringify(response));
+
     // Return the response from Wasabi's API directly to the client.
     res.status(200).json(response);
   } catch (error) {
