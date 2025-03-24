@@ -175,18 +175,9 @@ app.post('/api/reset-2fa', async (req, res) => {
 });
 
 // Endpoint to get card transactions from Wasabi API.
-// Supports three APIs based on the "apiType" parameter:
-// - Default (or "card"): calls /merchant/core/mcb/card/transaction
-// - "auth": calls /merchant/core/mcb/card/authTransaction
-// - "third3ds": calls /merchant/core/mcb/card/third3dsTransaction
-// Endpoint to get card transactions from Wasabi API.
-// Supports three APIs based on the "apiType" parameter:
-// - Default (or "card"): calls /merchant/core/mcb/card/transaction
-// - "auth": calls /merchant/core/mcb/card/authTransaction
-// - "third3ds": calls /merchant/core/mcb/card/third3dsTransaction
 app.post('/get-card-transactions', async (req, res) => {
   try {
-    const { apiType, pageNum, pageSize, type, cardNo, startTime, endTime } = req.body;
+    const { pageNum, pageSize, type, cardNo, startTime, endTime } = req.body;
     
     // Validate required parameters
     if (!pageNum || !pageSize || !type) {
@@ -196,15 +187,10 @@ app.post('/get-card-transactions', async (req, res) => {
       });
     }
     
-    // Decide which Wasabi API endpoint to call based on apiType
-    let wasabiEndpoint = '/merchant/core/mcb/card/transaction'; // default for regular transactions
-    if (apiType === 'auth') {
-      wasabiEndpoint = '/merchant/core/mcb/card/authTransaction';
-    } else if (apiType === 'third3ds') {
-      wasabiEndpoint = '/merchant/core/mcb/card/third3dsTransaction';
-    }
+    // Always use the authTransaction endpoint.
+    const wasabiEndpoint = '/merchant/core/mcb/card/authTransaction';
     
-    // Build payload – include optional parameters only if provided
+    // Build payload – include optional parameters only if provided.
     const payload = {
       pageNum,
       pageSize,
@@ -214,13 +200,13 @@ app.post('/get-card-transactions', async (req, res) => {
       ...(endTime && { endTime }),
     };
     
-    // Call the Wasabi API using your existing helper function
+    // Call the Wasabi API using your existing helper function.
     const response = await callWasabiApi(wasabiEndpoint, payload);
     
-    // Deduplicate transactions by orderNo if response is successful
+    // Deduplicate transactions using tradeNo as the unique identifier.
     if (response.success && response.data && Array.isArray(response.data.records)) {
       const uniqueRecords = Array.from(
-        new Map(response.data.records.map(item => [item.orderNo, item])).values()
+        new Map(response.data.records.map(item => [item.tradeNo, item])).values()
       );
       response.data.records = uniqueRecords;
       response.data.total = uniqueRecords.length;
@@ -336,36 +322,62 @@ app.post('/openCard', async (req, res) => {
 
 
 // Webhook endpoint for Wasabi API
-app.post('/webhook', express.json({
+// Webhook endpoint for Wasabi API
+app.post(
+  '/webhook',
+  express.json({
     verify: (req, res, buf) => {
       req.rawBody = buf.toString();
     },
   }),
   (req, res) => {
-    // Immediately acknowledge with the expected JSON response
-    const responsePayload = {
-      success: true,
-      code: 200,
-      msg: 'Success',
-      data: null,
-    };
+    // Prepare the immediate response payload:
+    // For card creation (type "create"), data is null.
+    // For transaction events (type "auth"), return the status and tradeNo.
+    let responsePayload;
+    if (req.body.type === 'create') {
+      responsePayload = {
+        success: true,
+        code: 200,
+        msg: 'Success',
+        data: null,
+      };
+    } else if (req.body.type === 'auth') {
+      responsePayload = {
+        success: true,
+        code: 200,
+        msg: 'Success',
+        data: {
+          status: req.body.status || 'unknown',
+          tradeNo: req.body.tradeNo || null,
+        },
+      };
+    } else {
+      // For any other types, default to returning status and tradeNo if available.
+      responsePayload = {
+        success: true,
+        code: 200,
+        msg: 'Success',
+        data: {
+          status: req.body.status || 'unknown',
+          tradeNo: req.body.tradeNo || null,
+        },
+      };
+    }
+    
+    // Immediately acknowledge the webhook.
     res.status(200).json(responsePayload);
     // console.log('Webhook immediately acknowledged with response:', responsePayload);
-
-    // Process the webhook asynchronously so as not to delay the response
+    
+    // Process the webhook asynchronously so as not to delay the response.
     setImmediate(async () => {
-      // console.log('Webhook raw payload:', req.rawBody);
-      // console.log('Webhook parsed payload:', req.body);
-
-      // Check for a signature header if provided
+      // Verify signature if header is provided.
       const signature = req.headers['x-signature'];
       if (signature) {
         const computedSignature = crypto
           .createHmac('sha256', process.env.WASABI_WEBHOOK_SECRET)
           .update(req.rawBody)
           .digest('hex');
-        // console.log('Computed signature:', computedSignature);
-        // console.log('Received signature:', signature);
         if (computedSignature !== signature) {
           console.error('Signature verification failed.');
           return;
@@ -373,19 +385,18 @@ app.post('/webhook', express.json({
       } else {
         console.warn('No signature header found.');
       }
-
-      // Extract common parameters from the webhook payload
-      const { orderNo, cardNo, type, transactionTime } = req.body;
-      // console.log('Extracted orderNo:', orderNo, 'cardNo:', cardNo, 'type:', type);
+    
+      // Extract common parameters including tradeNo.
+      const { orderNo, cardNo, type, tradeNo } = req.body;
       if (!orderNo || !cardNo) {
         console.error('Missing orderNo or cardNo in webhook payload.');
         return;
       }
-
-      // Process card creation events (type 'create') regardless of transactionTime
+    
+      // Process card creation events (type "create")
       if (type === 'create') {
-        // Optional: Update transaction cache if transactionTime exists
-        if (transactionTime) {
+        // (Card creation processing remains unchanged.)
+        try {
           if (!transactionCache[cardNo]) {
             transactionCache[cardNo] = [];
           }
@@ -393,31 +404,23 @@ app.post('/webhook', express.json({
             orderNo,
             cardNo,
             type,
-            transactionTime,
             ...req.body,
           });
-          // console.log(`Updated transaction cache for card ${cardNo}:`, transactionCache[cardNo]);
-        }
-        // Process the card creation event: update the DB
-        try {
+    
           const database = client.db('aiacard-sandbox-db');
           const collection = database.collection('aiacard-sandox-col');
-
-          // Lookup the user by orderNo
-          const user = await collection.findOne({ orderNo: orderNo });
-          // console.log('User found by orderNo:', user);
+    
+          // Lookup the user by orderNo.
+          const user = await collection.findOne({ orderNo });
           if (!user) {
             console.error(`No user found with orderNo: ${orderNo}`);
             return;
           }
-
-          // Determine the current number of active cards (default to 0 if not set)
+    
           const activeCards = user.activeCards || 0;
           const newCardIndex = activeCards + 1;
-          // Create a new field name, e.g., "cardNo1", "cardNo2", etc.
           const cardFieldName = `cardNo${newCardIndex}`;
-
-          // Update the user record: add the new cardNo field, increment activeCards, and overwrite orderNo with ""
+    
           const updateResult = await collection.updateOne(
             { _id: user._id },
             {
@@ -425,21 +428,32 @@ app.post('/webhook', express.json({
               $inc: { activeCards: 1 },
             }
           );
-          // console.log(`Attempting to set field ${cardFieldName} with value: ${cardNo} and reset orderNo.`);
-          // console.log('Update result:', updateResult);
-
+    
           if (updateResult.modifiedCount > 0) {
-            // console.log(`User ${user.email} updated: ${cardFieldName} set to ${cardNo}. Active cards now: ${newCardIndex}`);
+            // Successfully updated the user record.
           } else {
             console.error('Failed to update user record with new card information.');
           }
         } catch (dbError) {
           console.error('Error updating MongoDB with card details:', dbError);
         }
-      } else if (type === 'deposit') {
-        // console.log(`Webhook event type ${type} is not recognized for processing. Skipping.`);
+      } else if (type === 'auth') {
+        // Process transaction events (type "auth").
+        console.log(`Processing auth transaction: tradeNo: ${tradeNo}, status: ${req.body.status}`);
+        // Optionally update a transaction cache or perform additional processing here.
+        if (!transactionCache[cardNo]) {
+          transactionCache[cardNo] = [];
+        }
+        transactionCache[cardNo].push({
+          tradeNo,
+          cardNo,
+          type,
+          status: req.body.status,
+          ...req.body,
+        });
+        // Additional processing (e.g., updating the DB) can be added here if needed.
       } else {
-        // console.log(`Webhook event type ${type} is not recognized for processing. Skipping.`);
+        console.log(`Webhook event type ${type} is not recognized for processing. Skipping.`);
       }
     });
   }
