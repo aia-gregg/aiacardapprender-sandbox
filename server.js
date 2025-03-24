@@ -562,7 +562,7 @@ app.post('/top-up', async (req, res) => {
       const collectionName = process.env.MONGODB_COLLECTION_TOPUP;
       await client.db(dbName).collection(collectionName).insertOne(topupRecord);
 
-      return res.json({ success: true, data });
+      return res.status(200).json({ success: true, data });
     } else {
       return res.status(400).json({
         success: false,
