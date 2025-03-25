@@ -186,32 +186,55 @@ app.get('/referrals', async (req, res) => {
     const database = client.db("aiacard-sandbox-db");
     const collection = database.collection("aiacard-sandox-col");
 
-    // Find all users who were referred by the provided referralId.
-    const referredUsers = await collection.find({
-      referralId: referralId
-    }).toArray();
+    // Retrieve all users referred by the given referralId.
+    const referredUsers = await collection.find({ referralId }).toArray();
 
-    // Build the response array
-    const referralDetails = referredUsers.map(user => {
+    // Map over each referred user and calculate commission based on their position (1-indexed)
+    const referralDetails = referredUsers.map((user, index) => {
       const activeCards = user.activeCards || 0;
       let commission = 0;
+      const userPosition = index + 1; // 1-indexed position
 
-      // Calculate commission based on each aiaCardId
+      // Determine commission rates based on user tier (position in the array)
+      let rates = { lite: 0, pro: 0, elite: 0 };
+
+      if (userPosition <= 3) {
+        rates.lite = 4.9;
+        rates.pro = 9.9;
+        rates.elite = 14.9;
+      } else if (userPosition >= 4 && userPosition <= 10) {
+        rates.lite = 7.35;
+        rates.pro = 14.85;
+        rates.elite = 22.35;
+      } else if (userPosition >= 11 && userPosition <= 50) {
+        rates.lite = 9.8;
+        rates.pro = 19.8;
+        rates.elite = 29.8;
+      } else if (userPosition >= 51 && userPosition <= 100) {
+        rates.lite = 12.25;
+        rates.pro = 24.75;
+        rates.elite = 37.25;
+      } else if (userPosition >= 101) {
+        rates.lite = 14.7;
+        rates.pro = 29.7;
+        rates.elite = 44.7;
+      }
+
+      // Loop through each active card and sum up the commission
       for (let i = 1; i <= activeCards; i++) {
         const cardType = user[`cardNo${i}aiaId`];
         if (cardType === 'lite') {
-          commission += 5;
+          commission += rates.lite;
         } else if (cardType === 'pro') {
-          commission += 10;
+          commission += rates.pro;
         } else if (cardType === 'elite') {
-          commission += 20;
+          commission += rates.elite;
         }
       }
 
       return {
-        // Use user.fullName if it exists; otherwise combine firstName + lastName
-        fullName: user.fullName
-          ? user.fullName
+        fullName: user.fullName 
+          ? user.fullName 
           : `${user.firstName || ''} ${user.lastName || ''}`.trim(),
         activeCards: activeCards,
         commission: commission
@@ -221,13 +244,10 @@ app.get('/referrals', async (req, res) => {
     res.status(200).json({ success: true, data: referralDetails });
   } catch (error) {
     console.error("Error fetching referral details for referralId:", referralId, error);
-    res.status(500).json({
-      success: false,
-      message: "Internal server error",
-      error: error.message
-    });
+    res.status(500).json({ success: false, message: "Internal server error", error: error.message });
   }
 });
+
 
 
 
