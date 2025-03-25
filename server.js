@@ -185,38 +185,50 @@ app.get('/referrals', async (req, res) => {
   try {
     const database = client.db("aiacard-sandbox-db");
     const collection = database.collection("aiacard-sandox-col");
-    
+
     // Find all users who were referred by the provided referralId.
     const referredUsers = await collection.find({
       referralId: referralId
-      // verified: true // removed filter
     }).toArray();
 
-    // For each referred user, extract their full name, activeCards count, and the list of card types (aiaCardId)
+    // Build the response array
     const referralDetails = referredUsers.map(user => {
       const activeCards = user.activeCards || 0;
-      const cards = [];
+      let commission = 0;
+
+      // Calculate commission based on each aiaCardId
       for (let i = 1; i <= activeCards; i++) {
-        // The card type is stored in a field like "cardNo1aiaId", "cardNo2aiaId", etc.
-        const aiaCardId = user[`cardNo${i}aiaId`];
-        if (aiaCardId) {
-          cards.push({ aiaCardId });
+        const cardType = user[`cardNo${i}aiaId`];
+        if (cardType === 'lite') {
+          commission += 5;
+        } else if (cardType === 'pro') {
+          commission += 10;
+        } else if (cardType === 'elite') {
+          commission += 20;
         }
       }
+
       return {
-        // Use user.fullName if exists, otherwise combine firstName and lastName
-        fullName: user.fullName ? user.fullName : `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+        // Use user.fullName if it exists; otherwise combine firstName + lastName
+        fullName: user.fullName
+          ? user.fullName
+          : `${user.firstName || ''} ${user.lastName || ''}`.trim(),
         activeCards: activeCards,
-        cards: cards
+        commission: commission
       };
     });
 
     res.status(200).json({ success: true, data: referralDetails });
   } catch (error) {
     console.error("Error fetching referral details for referralId:", referralId, error);
-    res.status(500).json({ success: false, message: "Internal server error", error: error.message });
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message
+    });
   }
 });
+
 
 
 // Endpoint to update the user's biometrics preference
