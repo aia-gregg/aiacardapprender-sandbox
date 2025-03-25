@@ -207,6 +207,7 @@ app.get('/referrals', async (req, res) => {
   }
 });
 
+
 // Endpoint to update the user's biometrics preference
 app.post('/api/update-biometrics', async (req, res) => {
   const { email, biometricsEnabled } = req.body;
@@ -834,6 +835,7 @@ app.post('/login', async (req, res) => {
         referralId: user.referralId,
         holderId: user.holderId,
         isGAVerified: user.isGAVerified,  // This field will be true if the user is GA verified
+        yourReferralId: user.yourReferralId,
       }
     });
   } catch (error) {
