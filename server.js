@@ -385,41 +385,47 @@ app.post('/webhook', express.json({
 //     return null;
 //   }
 // }
+function getPrivateKey() {
+  let privateKeyB64 = process.env.WASABI_PRIVATE_KEY_B64;
+  if (!privateKeyB64) {
+    throw new Error('WASABI_PRIVATE_KEY_B64 not set in environment');
+  }
+  // If already PEM formatted, return as is.
+  if (privateKeyB64.includes('-----BEGIN')) {
+    return privateKeyB64;
+  }
+  // Otherwise, wrap the base64 string in PEM headers.
+  const keyLines = privateKeyB64.match(/.{1,64}/g);
+  return `-----BEGIN PRIVATE KEY-----\n${keyLines.join('\n')}\n-----END PRIVATE KEY-----\n`;
+}
 
-function decryptRSA(encryptedData, privateKeyB64) {
+function decryptRSA(encryptedData) {
   if (!encryptedData) return null;
   try {
-    // If the data appears URL-encoded (contains '%'), decode it
+    // If the data appears URL-encoded, decode it.
     if (encryptedData.includes('%')) {
       encryptedData = decodeURIComponent(encryptedData);
     }
-    // Decode the encrypted data from base64
+    // Decode the encrypted data from base64.
     const encryptedBuffer = Buffer.from(encryptedData, 'base64');
-
-    // Decode the private key from base64 to a Buffer
-    const privateKeyBuffer = Buffer.from(privateKeyB64, 'base64');
-
-    // Create a KeyObject from the DER-encoded PKCS#8 private key
-    const keyObject = crypto.createPrivateKey({
-      key: privateKeyBuffer,
-      format: 'der',
-      type: 'pkcs8'
-    });
-
-    // Determine the maximum decryption block size (in bytes)
-    // If key details are available, use modulusLength; otherwise, default to 256 bytes (for a 2048-bit key)
+    // Get the private key in PEM format.
+    const pemKey = getPrivateKey();
+    // Create a KeyObject using the PEM key.
+    const keyObject = crypto.createPrivateKey(pemKey);
+    
+    // Determine the maximum block size.
+    // If key details are available, use the modulusLength; otherwise, default to 256 bytes.
     let maxBlockSize = 256;
     if (keyObject.asymmetricKeyDetails && keyObject.asymmetricKeyDetails.modulusLength) {
       maxBlockSize = keyObject.asymmetricKeyDetails.modulusLength / 8;
     }
-
-    // Decrypt the encrypted buffer in chunks
+    
     let offset = 0;
     const decryptedChunks = [];
+    // Decrypt the encrypted buffer in chunks.
     while (offset < encryptedBuffer.length) {
       const end = Math.min(offset + maxBlockSize, encryptedBuffer.length);
       const chunk = encryptedBuffer.slice(offset, end);
-      // Decrypt the current block using RSA with PKCS1 padding
       const decryptedChunk = crypto.privateDecrypt(
         {
           key: keyObject,
@@ -430,10 +436,7 @@ function decryptRSA(encryptedData, privateKeyB64) {
       decryptedChunks.push(decryptedChunk);
       offset += maxBlockSize;
     }
-
-    // Concatenate all decrypted chunks and convert to UTF-8 string
-    const decrypted = Buffer.concat(decryptedChunks);
-    return decrypted.toString('utf8');
+    return Buffer.concat(decryptedChunks).toString('utf8');
   } catch (err) {
     console.error('Decryption failed:', err);
     return null;
@@ -524,13 +527,13 @@ app.post('/get-active-cards', async (req, res) => {
         
         // 1. Decrypt the validPeriod (expiry) with your RSA private key
         const rawValidPeriod = data.validPeriod; // This is the base64-encrypted string
-        const expiry = decryptRSA(rawValidPeriod, process.env.WASABI_PRIVATE_KEY_B64) || 'N/A';
+        const expiry = decryptRSA(rawValidPeriod) || 'N/A';
         
         // 2. Decrypt cardNumber if necessary; otherwise, use raw and mask it.
         const rawCardNumber = data.cardNumber;
         let maskedCardNumber = "";
         // Try to decrypt; if decryption fails, fall back to masking the raw value
-        const decryptedCardNumber = decryptRSA(rawCardNumber, process.env.WASABI_PRIVATE_KEY_B64);
+        const decryptedCardNumber = decryptRSA(rawCardNumber);
         if (decryptedCardNumber && decryptedCardNumber.length >= 4) {
           maskedCardNumber = "**** " + decryptedCardNumber.slice(-4);
         } else if (data.cardNumber && data.cardNumber.length >= 4) {
