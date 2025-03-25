@@ -938,6 +938,7 @@ app.post('/verify-login-otp', async (req, res) => {
         postCode: user.postCode,
         country: user.country,
         referralId: user.referralId,
+        yourReferralId: user.yourReferralId,
         holderId: user.holderId,
         isGAVerified: user.isGAVerified,  // Explicitly include GA flag
       }
