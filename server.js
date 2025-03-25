@@ -1,3 +1,4 @@
+
 const express = require('express');
 const cors = require('cors');
 const bcryptjs = require('bcryptjs');
@@ -363,100 +364,28 @@ app.post('/webhook', express.json({
 
 
 // // A helper function to decrypt a base64-encoded field from Wasabi using your RSA private key.
-// function decryptRSA(encryptedBase64, privateKey) {
-//   if (!encryptedBase64) return null;
-//   try {
-//     const buffer = Buffer.from(encryptedBase64, 'base64');
-//     // Use the appropriate padding based on your encryption method.
-//     const decryptedBuffer = crypto.privateDecrypt(
-//       {
-//         key: privateKey,
-//         // If your encryption uses PKCS1 padding and you're on a newer Node version, you might need:
-//         // padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
-//         // Or run Node with the --openssl-legacy-provider flag and uncomment the line below:
-//         padding: crypto.constants.RSA_PKCS1_PADDING,
-//         // padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
-//       },
-//       buffer
-//     );
-//     return decryptedBuffer.toString('utf8');
-//   } catch (err) {
-//     console.error('Decryption failed:', err);
-//     return null;
-//   }
-// }
-function getPrivateKey() {
-  let privateKeyStr = process.env.WASABI_PRIVATE_KEY_B64;
-  if (!privateKeyStr) {
-    throw new Error('WASABI_PRIVATE_KEY_B64 not set in environment');
-  }
-  // Check if the key already contains PEM headers.
-  if (privateKeyStr.includes('-----BEGIN')) {
-    return privateKeyStr;
-  }
-  // Otherwise, assume it is a raw base64 string and wrap it.
-  // Adjust the header type ("PRIVATE KEY" vs "RSA PRIVATE KEY") based on your key format.
-  const keyLines = privateKeyStr.match(/.{1,64}/g);
-  // If your key is in PKCS#8 format, use the following header/footer:
-  return `-----BEGIN PRIVATE KEY-----\n${keyLines.join('\n')}\n-----END PRIVATE KEY-----\n`;
-  // If your key is in PKCS#1 (RSA), then use:
-  // return `-----BEGIN RSA PRIVATE KEY-----\n${keyLines.join('\n')}\n-----END RSA PRIVATE KEY-----\n`;
-}
-
-function decryptRSA(encryptedData) {
-  if (!encryptedData) return null;
+function decryptRSA(encryptedBase64, privateKey) {
+  if (!encryptedBase64) return null;
   try {
-    // If the data is URL-encoded, decode it.
-    if (encryptedData.includes('%')) {
-      encryptedData = decodeURIComponent(encryptedData);
-    }
-    // Convert the encrypted data from base64 into a Buffer.
-    const encryptedBuffer = Buffer.from(encryptedData, 'base64');
-    // Obtain the private key in PEM format.
-    const pemKey = getPrivateKey();
-    
-    // Detect the key type based on the PEM header.
-    let keyType = 'pkcs8'; // default assumption for "-----BEGIN PRIVATE KEY-----"
-    if (pemKey.includes('RSA PRIVATE KEY')) {
-      keyType = 'pkcs1';
-    }
-    
-    // Create a KeyObject from the PEM key.
-    const keyObject = crypto.createPrivateKey({
-      key: pemKey,
-      format: 'pem',
-      type: keyType
-    });
-    
-    // Determine the maximum block size (in bytes) for decryption.
-    let maxBlockSize = 256; // default for a 2048-bit key
-    if (keyObject.asymmetricKeyDetails && keyObject.asymmetricKeyDetails.modulusLength) {
-      maxBlockSize = keyObject.asymmetricKeyDetails.modulusLength / 8;
-    }
-    
-    let offset = 0;
-    const decryptedChunks = [];
-    // Process the encrypted buffer in blocks.
-    while (offset < encryptedBuffer.length) {
-      const end = Math.min(offset + maxBlockSize, encryptedBuffer.length);
-      const chunk = encryptedBuffer.slice(offset, end);
-      const decryptedChunk = crypto.privateDecrypt(
-        {
-          key: keyObject,
-          padding: crypto.constants.RSA_PKCS1_PADDING,
-        },
-        chunk
-      );
-      decryptedChunks.push(decryptedChunk);
-      offset += maxBlockSize;
-    }
-    return Buffer.concat(decryptedChunks).toString('utf8');
+    const buffer = Buffer.from(encryptedBase64, 'base64');
+    // Use the appropriate padding based on your encryption method.
+    const decryptedBuffer = crypto.privateDecrypt(
+      {
+        key: privateKey,
+        // If your encryption uses PKCS1 padding and you're on a newer Node version, you might need:
+        // padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+        // Or run Node with the --openssl-legacy-provider flag and uncomment the line below:
+        padding: crypto.constants.RSA_PKCS1_PADDING,
+        // padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+      },
+      buffer
+    );
+    return decryptedBuffer.toString('utf8');
   } catch (err) {
     console.error('Decryption failed:', err);
     return null;
   }
 }
-
 
 // Endpoint to pull actual card auth transactions from Wasabi API
 app.post('/card-auth-transactions', async (req, res) => {
@@ -504,7 +433,7 @@ app.post('/get-active-cards', async (req, res) => {
     const database = client.db("aiacard-sandbox-db");
     const collection = database.collection("aiacard-sandox-col");
     
-    // Lookup the user document by email.
+    // Lookup user document by email
     const user = await collection.findOne({ email });
     if (!user) {
       return res.status(404).json({ success: false, message: "User not found" });
@@ -512,46 +441,58 @@ app.post('/get-active-cards', async (req, res) => {
     
     const activeCardsCount = user.activeCards || 0;
     const cardDetailsArray = [];
+
+    // Make sure merchantPrivateKey is defined/imported (from wasabiApi.js, for example)
+    // e.g., const { merchantPrivateKey } = require('./wasabiApi');
     
     for (let i = 1; i <= activeCardsCount; i++) {
       const cardNoField = `cardNo${i}`;
-      const cardTypeField = `cardNo${i}aiaId`;
-      const cardNo = user[cardNoField];
-      const aiaCardId = user[cardTypeField];
-      if (!cardNo) continue;
+      // Update this field name to exactly match what's stored in MongoDB
+      const cardTypeField = `cardNo${i}aiaId`; // e.g. "cardNo1aiaId"
       
+      const cardNo = user[cardNoField];
+      const aiaCardId = user[cardTypeField];  // This value should be 'lite', 'pro', or 'elite'
+      if (!cardNo) continue; // Skip if no card number stored
+      
+      // Prepare payload for the Wasabi Card Info API call
       const payload = {
         cardNo: cardNo,
-        onlySimpleInfo: false,
+        onlySimpleInfo: false, // Retrieve full details including balance info
       };
       
-      // Call the Wasabi API to retrieve card info.
+      // Call Wasabi's API using your helper function
       const response = await callWasabiApi('/merchant/core/mcb/card/info', payload);
+      // Log the raw response from Wasabi API for debugging
+      console.log('Raw response from Wasabi API for cardNo:', cardNo, response);
       
       if (response && response.success && response.data) {
         const data = response.data;
         
-        // Decrypt the validPeriod (expiry) using decryptRSA().
-        const rawValidPeriod = data.validPeriod;
-        const expiry = decryptRSA(rawValidPeriod) || 'N/A';
+        // 1. Decrypt the validPeriod (expiry) with your RSA private key
+        const rawValidPeriod = data.validPeriod; // This is the base64-encrypted string
+        const expiry = decryptRSA(rawValidPeriod, merchantPrivateKey) || 'N/A';
         
-        // Decrypt cardNumber and mask it (show only the last 4 digits).
+        // 2. Decrypt cardNumber if necessary; otherwise, use raw and mask it.
         const rawCardNumber = data.cardNumber;
         let maskedCardNumber = "";
-        const decryptedCardNumber = decryptRSA(rawCardNumber);
+        // Try to decrypt; if decryption fails, fall back to masking the raw value
+        const decryptedCardNumber = decryptRSA(rawCardNumber, merchantPrivateKey);
         if (decryptedCardNumber && decryptedCardNumber.length >= 4) {
           maskedCardNumber = "**** " + decryptedCardNumber.slice(-4);
         } else if (data.cardNumber && data.cardNumber.length >= 4) {
           maskedCardNumber = "**** " + data.cardNumber.slice(-4);
         }
         
+        // Extract balance from balanceInfo.amount
         const balance = data.balanceInfo?.amount || null;
+
+        // Build a card detail object, merging the MongoDB field (aiaCardId) with the Wasabi data.
         const cardDetail = {
-          aiaCardId,
-          cardNo: data.cardNo,
-          maskedCardNumber,
-          expiry,
-          balance,
+          aiaCardId,               // e.g., 'lite', 'pro', or 'elite' from MongoDB
+          cardNo: data.cardNo,       // Bank Card ID from Wasabi
+          maskedCardNumber,         // e.g., "**** 2595"
+          expiry,                   // Decrypted expiry or "N/A"
+          balance,                  // Card balance
           status: data.status,
           statusStr: data.statusStr,
           bindTime: data.bindTime,
@@ -1897,4 +1838,3 @@ const server = app.listen(port, '0.0.0.0', () => {
 server.on('error', (err) => {
   console.error('Server error:', err);
 });
-
