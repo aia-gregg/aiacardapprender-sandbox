@@ -181,28 +181,38 @@ app.get('/referrals', async (req, res) => {
   if (!referralId) {
     return res.status(400).json({ success: false, message: "Missing referralId parameter" });
   }
-  
+
   try {
     const database = client.db("aiacard-sandbox-db");
     const collection = database.collection("aiacard-sandox-col");
     
-    // Query for users who have the given referralId and a verified payment.
-    // Adjust the field names (e.g., referralId, verified, fullName, cardPrice, aiaCardId) as needed.
-    const referrals = await collection.find({ 
-      referralId: referralId, 
-      verified: true 
+    // Find all users who were referred by the provided referralId and have verified payments.
+    const referredUsers = await collection.find({
+      referralId: referralId,
+      verified: true
     }).toArray();
-    
-    // Optionally, you can project only the necessary fields.
-    const projectedReferrals = referrals.map(user => ({
-      fullName: user.fullName,
-      cardPrice: user.cardPrice,       // The price paid for the card
-      aiaCardId: user.aiaCardId          // The card identifier
-    }));
-    
-    res.status(200).json({ success: true, data: projectedReferrals });
+
+    // For each referred user, extract their full name, activeCards count, and the list of card types (aiaCardId)
+    const referralDetails = referredUsers.map(user => {
+      const activeCards = user.activeCards || 0;
+      const cards = [];
+      for (let i = 1; i <= activeCards; i++) {
+        // The card type is stored in a field like "cardNo1aiaId", "cardNo2aiaId", etc.
+        const aiaCardId = user[`cardNo${i}aiaId`];
+        if (aiaCardId) {
+          cards.push({ aiaCardId });
+        }
+      }
+      return {
+        fullName: user.fullName,
+        activeCards: activeCards,
+        cards: cards
+      };
+    });
+
+    res.status(200).json({ success: true, data: referralDetails });
   } catch (error) {
-    console.error("Error fetching referrals for referralId:", referralId, error);
+    console.error("Error fetching referral details for referralId:", referralId, error);
     res.status(500).json({ success: false, message: "Internal server error", error: error.message });
   }
 });
