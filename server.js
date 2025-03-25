@@ -175,6 +175,39 @@ app.post('/api/reset-2fa', async (req, res) => {
   }
 });
 
+// Endpoint to fetch referrals for a given referral ID
+app.get('/api/referrals', async (req, res) => {
+  const { referralId } = req.query;
+  if (!referralId) {
+    return res.status(400).json({ success: false, message: "Missing referralId parameter" });
+  }
+  
+  try {
+    const database = client.db("aiacard-sandbox-db");
+    const collection = database.collection("aiacard-sandox-col");
+    
+    // Query for users who have the given referralId and a verified payment.
+    // Adjust the field names (e.g., referralId, verified, fullName, cardPrice, aiaCardId) as needed.
+    const referrals = await collection.find({ 
+      referralId: referralId, 
+      verified: true 
+    }).toArray();
+    
+    // Optionally, you can project only the necessary fields.
+    const projectedReferrals = referrals.map(user => ({
+      fullName: user.fullName,
+      cardPrice: user.cardPrice,       // The price paid for the card
+      aiaCardId: user.aiaCardId          // The card identifier
+    }));
+    
+    res.status(200).json({ success: true, data: projectedReferrals });
+  } catch (error) {
+    console.error("Error fetching referrals for referralId:", referralId, error);
+    res.status(500).json({ success: false, message: "Internal server error", error: error.message });
+  }
+});
+
+
 // Endpoint to update the user's biometrics preference
 app.post('/api/update-biometrics', async (req, res) => {
   const { email, biometricsEnabled } = req.body;
