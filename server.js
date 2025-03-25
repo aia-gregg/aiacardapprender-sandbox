@@ -13,9 +13,6 @@ const fireblocks = require('./fireblocks');
 // const http = require('http');
 const otplib = require('otplib');
 //const mongoose = require('mongoose');
-const { Server } = require("socket.io");
-require('dotenv').config();
-const http = require('http');
 
 // MongoDB Connection
 const uri = process.env.MONGODB_URI;
@@ -52,7 +49,6 @@ const transactionCache = {};
 const secretKey = "your_super_secret_key";
 
 const app = express();
-const server = http.createServer(app);
 const port = process.env.PORT || 3000;
 
 // Middleware
@@ -85,12 +81,6 @@ client.connect()
  * Generates (or reuses) a TOTP secret for the user, saves it in MongoDB,
  * and returns the otpauth URL for Google Authenticator.
  */
-
-const io = new Server(server, {
-  cors: { origin: '*' } // Adjust as needed.
-});
-
-
 app.get('/api/generate-2fa', async (req, res) => {
   const email = req.query.email;
   if (!email) {
@@ -216,7 +206,6 @@ app.get('/api/referrals', async (req, res) => {
     res.status(500).json({ success: false, message: "Internal server error", error: error.message });
   }
 });
-
 
 // Endpoint to update the user's biometrics preference
 app.post('/api/update-biometrics', async (req, res) => {
@@ -395,10 +384,6 @@ app.post('/webhook', express.json({
 
         if (updateResult.modifiedCount > 0) {
           console.log(`User ${user.email} updated: ${cardFieldName} set to ${cardNo}. Active cards now: ${newCardIndex}`);
-  
-          // Emit a socket event to notify clients about the successful card creation.
-          io.emit('cardCreationUpdate', req.body);
-          console.log(`Emitted cardCreationUpdate event with payload:`, req.body);
         } else {
           console.error('Failed to update user record with new card information.');
         }
@@ -406,22 +391,8 @@ app.post('/webhook', express.json({
         console.error('Error updating MongoDB with card details:', dbError);
       }
     });
-  });
-  
-  // Optional: Allow clients to join a room (if needed for targeted updates)
-  io.on('connection', (socket) => {
-    console.log('A client connected:', socket.id);
-  
-    socket.on('joinOrderRoom', (orderNo) => {
-      socket.join(orderNo);
-      console.log(`Socket ${socket.id} joined room: ${orderNo}`);
-    });
-  
-    socket.on('disconnect', () => {
-      console.log('Client disconnected:', socket.id);
-    });
-  });
-  
+  }
+);
 
 
 // // A helper function to decrypt a base64-encoded field from Wasabi using your RSA private key.
@@ -1893,14 +1864,9 @@ app.post('/create-vault-account', async (req, res) => {
 });
 
 
-// const server = app.listen(port, '0.0.0.0', () => {
-//   console.log(`🚀 Server running on port ${port}`);
-// });
-// server.on('error', (err) => {
-//   console.error('Server error:', err);
-// });
-
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`Server listening on port ${PORT}`);
+const server = app.listen(port, '0.0.0.0', () => {
+  console.log(`🚀 Server running on port ${port}`);
+});
+server.on('error', (err) => {
+  console.error('Server error:', err);
 });
