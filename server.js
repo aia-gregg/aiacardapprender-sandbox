@@ -386,43 +386,44 @@ app.post('/webhook', express.json({
 //   }
 // }
 function getPrivateKey() {
-  let privateKeyB64 = process.env.WASABI_PRIVATE_KEY_B64;
-  if (!privateKeyB64) {
+  let privateKeyStr = process.env.WASABI_PRIVATE_KEY_B64;
+  if (!privateKeyStr) {
     throw new Error('WASABI_PRIVATE_KEY_B64 not set in environment');
   }
-  // If already PEM formatted, return as is.
-  if (privateKeyB64.includes('-----BEGIN')) {
-    return privateKeyB64;
+  // Check if the key already contains PEM headers.
+  if (privateKeyStr.includes('-----BEGIN')) {
+    return privateKeyStr;
   }
-  // Otherwise, wrap the base64 string in PEM headers.
-  const keyLines = privateKeyB64.match(/.{1,64}/g);
+  // Otherwise, assume it is a raw base64 string and wrap it.
+  // (Make sure that this PEM header type matches your key format.)
+  const keyLines = privateKeyStr.match(/.{1,64}/g);
   return `-----BEGIN PRIVATE KEY-----\n${keyLines.join('\n')}\n-----END PRIVATE KEY-----\n`;
 }
 
 function decryptRSA(encryptedData) {
   if (!encryptedData) return null;
   try {
-    // If the data appears URL-encoded, decode it.
+    // If the data is URL-encoded, decode it.
     if (encryptedData.includes('%')) {
       encryptedData = decodeURIComponent(encryptedData);
     }
-    // Decode the encrypted data from base64.
+    // Convert the encrypted data from base64 into a Buffer.
     const encryptedBuffer = Buffer.from(encryptedData, 'base64');
-    // Get the private key in PEM format.
+    // Obtain the private key in PEM format.
     const pemKey = getPrivateKey();
-    // Create a KeyObject using the PEM key.
-    const keyObject = crypto.createPrivateKey(pemKey);
+    // Create a KeyObject from the PEM key.
+    // Let Node auto-detect the key type by specifying format as 'pem'.
+    const keyObject = crypto.createPrivateKey({ key: pemKey, format: 'pem' });
     
-    // Determine the maximum block size.
-    // If key details are available, use the modulusLength; otherwise, default to 256 bytes.
-    let maxBlockSize = 256;
+    // Determine the maximum block size for decryption.
+    let maxBlockSize = 256; // default for a 2048-bit key
     if (keyObject.asymmetricKeyDetails && keyObject.asymmetricKeyDetails.modulusLength) {
       maxBlockSize = keyObject.asymmetricKeyDetails.modulusLength / 8;
     }
     
     let offset = 0;
     const decryptedChunks = [];
-    // Decrypt the encrypted buffer in chunks.
+    // Process the encrypted buffer in blocks.
     while (offset < encryptedBuffer.length) {
       const end = Math.min(offset + maxBlockSize, encryptedBuffer.length);
       const chunk = encryptedBuffer.slice(offset, end);
@@ -490,7 +491,7 @@ app.post('/get-active-cards', async (req, res) => {
     const database = client.db("aiacard-sandbox-db");
     const collection = database.collection("aiacard-sandox-col");
     
-    // Lookup user document by email
+    // Lookup the user document by email.
     const user = await collection.findOne({ email });
     if (!user) {
       return res.status(404).json({ success: false, message: "User not found" });
@@ -498,41 +499,32 @@ app.post('/get-active-cards', async (req, res) => {
     
     const activeCardsCount = user.activeCards || 0;
     const cardDetailsArray = [];
-
-    // Make sure merchantPrivateKey is defined/imported (from wasabiApi.js, for example)
-    // e.g., const { merchantPrivateKey } = require('./wasabiApi');
     
     for (let i = 1; i <= activeCardsCount; i++) {
       const cardNoField = `cardNo${i}`;
-      // Update this field name to exactly match what's stored in MongoDB
-      const cardTypeField = `cardNo${i}aiaId`; // e.g. "cardNo1aiaId"
-      
+      const cardTypeField = `cardNo${i}aiaId`;
       const cardNo = user[cardNoField];
-      const aiaCardId = user[cardTypeField];  // This value should be 'lite', 'pro', or 'elite'
-      if (!cardNo) continue; // Skip if no card number stored
+      const aiaCardId = user[cardTypeField];
+      if (!cardNo) continue;
       
-      // Prepare payload for the Wasabi Card Info API call
       const payload = {
         cardNo: cardNo,
-        onlySimpleInfo: false, // Retrieve full details including balance info
+        onlySimpleInfo: false,
       };
       
-      // Call Wasabi's API using your helper function
+      // Call the Wasabi API to retrieve card info.
       const response = await callWasabiApi('/merchant/core/mcb/card/info', payload);
-      // Log the raw response from Wasabi API for debugging
-      // console.log('Raw response from Wasabi API for cardNo:', cardNo, response);
       
       if (response && response.success && response.data) {
         const data = response.data;
         
-        // 1. Decrypt the validPeriod (expiry) with your RSA private key
-        const rawValidPeriod = data.validPeriod; // This is the base64-encrypted string
+        // Decrypt the validPeriod (expiry) using decryptRSA().
+        const rawValidPeriod = data.validPeriod;
         const expiry = decryptRSA(rawValidPeriod) || 'N/A';
         
-        // 2. Decrypt cardNumber if necessary; otherwise, use raw and mask it.
+        // Decrypt cardNumber and mask it (show only the last 4 digits).
         const rawCardNumber = data.cardNumber;
         let maskedCardNumber = "";
-        // Try to decrypt; if decryption fails, fall back to masking the raw value
         const decryptedCardNumber = decryptRSA(rawCardNumber);
         if (decryptedCardNumber && decryptedCardNumber.length >= 4) {
           maskedCardNumber = "**** " + decryptedCardNumber.slice(-4);
@@ -540,16 +532,13 @@ app.post('/get-active-cards', async (req, res) => {
           maskedCardNumber = "**** " + data.cardNumber.slice(-4);
         }
         
-        // Extract balance from balanceInfo.amount
         const balance = data.balanceInfo?.amount || null;
-
-        // Build a card detail object, merging the MongoDB field (aiaCardId) with the Wasabi data.
         const cardDetail = {
-          aiaCardId,               // e.g., 'lite', 'pro', or 'elite' from MongoDB
-          cardNo: data.cardNo,       // Bank Card ID from Wasabi
-          maskedCardNumber,         // e.g., "**** 2595"
-          expiry,                   // Decrypted expiry or "N/A"
-          balance,                  // Card balance
+          aiaCardId,
+          cardNo: data.cardNo,
+          maskedCardNumber,
+          expiry,
+          balance,
           status: data.status,
           statusStr: data.statusStr,
           bindTime: data.bindTime,
