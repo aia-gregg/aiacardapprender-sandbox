@@ -188,8 +188,8 @@ app.get('/referrals', async (req, res) => {
     
     // Find all users who were referred by the provided referralId and have verified payments.
     const referredUsers = await collection.find({
-      referralId: referralId,
-      verified: true
+      referralId: referralId
+      // verified: true
     }).toArray();
 
     // For each referred user, extract their full name, activeCards count, and the list of card types (aiaCardId)
