@@ -395,9 +395,12 @@ function getPrivateKey() {
     return privateKeyStr;
   }
   // Otherwise, assume it is a raw base64 string and wrap it.
-  // (Make sure that this PEM header type matches your key format.)
+  // Adjust the header type ("PRIVATE KEY" vs "RSA PRIVATE KEY") based on your key format.
   const keyLines = privateKeyStr.match(/.{1,64}/g);
+  // If your key is in PKCS#8 format, use the following header/footer:
   return `-----BEGIN PRIVATE KEY-----\n${keyLines.join('\n')}\n-----END PRIVATE KEY-----\n`;
+  // If your key is in PKCS#1 (RSA), then use:
+  // return `-----BEGIN RSA PRIVATE KEY-----\n${keyLines.join('\n')}\n-----END RSA PRIVATE KEY-----\n`;
 }
 
 function decryptRSA(encryptedData) {
@@ -411,11 +414,21 @@ function decryptRSA(encryptedData) {
     const encryptedBuffer = Buffer.from(encryptedData, 'base64');
     // Obtain the private key in PEM format.
     const pemKey = getPrivateKey();
-    // Create a KeyObject from the PEM key.
-    // Let Node auto-detect the key type by specifying format as 'pem'.
-    const keyObject = crypto.createPrivateKey({ key: pemKey, format: 'pem' });
     
-    // Determine the maximum block size for decryption.
+    // Detect the key type based on the PEM header.
+    let keyType = 'pkcs8'; // default assumption for "-----BEGIN PRIVATE KEY-----"
+    if (pemKey.includes('RSA PRIVATE KEY')) {
+      keyType = 'pkcs1';
+    }
+    
+    // Create a KeyObject from the PEM key.
+    const keyObject = crypto.createPrivateKey({
+      key: pemKey,
+      format: 'pem',
+      type: keyType
+    });
+    
+    // Determine the maximum block size (in bytes) for decryption.
     let maxBlockSize = 256; // default for a 2048-bit key
     if (keyObject.asymmetricKeyDetails && keyObject.asymmetricKeyDetails.modulusLength) {
       maxBlockSize = keyObject.asymmetricKeyDetails.modulusLength / 8;
