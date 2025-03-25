@@ -186,10 +186,10 @@ app.get('/referrals', async (req, res) => {
     const database = client.db("aiacard-sandbox-db");
     const collection = database.collection("aiacard-sandox-col");
     
-    // Find all users who were referred by the provided referralId and have verified payments.
+    // Find all users who were referred by the provided referralId.
     const referredUsers = await collection.find({
       referralId: referralId
-      // verified: true
+      // verified: true // removed filter
     }).toArray();
 
     // For each referred user, extract their full name, activeCards count, and the list of card types (aiaCardId)
@@ -204,7 +204,8 @@ app.get('/referrals', async (req, res) => {
         }
       }
       return {
-        fullName: user.fullName,
+        // Use user.fullName if exists, otherwise combine firstName and lastName
+        fullName: user.fullName ? user.fullName : `${user.firstName || ''} ${user.lastName || ''}`.trim(),
         activeCards: activeCards,
         cards: cards
       };
