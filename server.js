@@ -363,28 +363,83 @@ app.post('/webhook', express.json({
 
 
 // // A helper function to decrypt a base64-encoded field from Wasabi using your RSA private key.
-function decryptRSA(encryptedBase64, privateKey) {
-  if (!encryptedBase64) return null;
+// function decryptRSA(encryptedBase64, privateKey) {
+//   if (!encryptedBase64) return null;
+//   try {
+//     const buffer = Buffer.from(encryptedBase64, 'base64');
+//     // Use the appropriate padding based on your encryption method.
+//     const decryptedBuffer = crypto.privateDecrypt(
+//       {
+//         key: privateKey,
+//         // If your encryption uses PKCS1 padding and you're on a newer Node version, you might need:
+//         // padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+//         // Or run Node with the --openssl-legacy-provider flag and uncomment the line below:
+//         padding: crypto.constants.RSA_PKCS1_PADDING,
+//         // padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+//       },
+//       buffer
+//     );
+//     return decryptedBuffer.toString('utf8');
+//   } catch (err) {
+//     console.error('Decryption failed:', err);
+//     return null;
+//   }
+// }
+
+function decryptRSA(encryptedData, privateKeyB64) {
+  if (!encryptedData) return null;
   try {
-    const buffer = Buffer.from(encryptedBase64, 'base64');
-    // Use the appropriate padding based on your encryption method.
-    const decryptedBuffer = crypto.privateDecrypt(
-      {
-        key: privateKey,
-        // If your encryption uses PKCS1 padding and you're on a newer Node version, you might need:
-        // padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
-        // Or run Node with the --openssl-legacy-provider flag and uncomment the line below:
-        padding: crypto.constants.RSA_PKCS1_PADDING,
-        // padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
-      },
-      buffer
-    );
-    return decryptedBuffer.toString('utf8');
+    // If the data appears URL-encoded (contains '%'), decode it
+    if (encryptedData.includes('%')) {
+      encryptedData = decodeURIComponent(encryptedData);
+    }
+    // Decode the encrypted data from base64
+    const encryptedBuffer = Buffer.from(encryptedData, 'base64');
+
+    // Decode the private key from base64 to a Buffer
+    const privateKeyBuffer = Buffer.from(privateKeyB64, 'base64');
+
+    // Create a KeyObject from the DER-encoded PKCS#8 private key
+    const keyObject = crypto.createPrivateKey({
+      key: privateKeyBuffer,
+      format: 'der',
+      type: 'pkcs8'
+    });
+
+    // Determine the maximum decryption block size (in bytes)
+    // If key details are available, use modulusLength; otherwise, default to 256 bytes (for a 2048-bit key)
+    let maxBlockSize = 256;
+    if (keyObject.asymmetricKeyDetails && keyObject.asymmetricKeyDetails.modulusLength) {
+      maxBlockSize = keyObject.asymmetricKeyDetails.modulusLength / 8;
+    }
+
+    // Decrypt the encrypted buffer in chunks
+    let offset = 0;
+    const decryptedChunks = [];
+    while (offset < encryptedBuffer.length) {
+      const end = Math.min(offset + maxBlockSize, encryptedBuffer.length);
+      const chunk = encryptedBuffer.slice(offset, end);
+      // Decrypt the current block using RSA with PKCS1 padding
+      const decryptedChunk = crypto.privateDecrypt(
+        {
+          key: keyObject,
+          padding: crypto.constants.RSA_PKCS1_PADDING,
+        },
+        chunk
+      );
+      decryptedChunks.push(decryptedChunk);
+      offset += maxBlockSize;
+    }
+
+    // Concatenate all decrypted chunks and convert to UTF-8 string
+    const decrypted = Buffer.concat(decryptedChunks);
+    return decrypted.toString('utf8');
   } catch (err) {
     console.error('Decryption failed:', err);
     return null;
   }
 }
+
 
 // Endpoint to pull actual card auth transactions from Wasabi API
 app.post('/card-auth-transactions', async (req, res) => {
@@ -469,13 +524,13 @@ app.post('/get-active-cards', async (req, res) => {
         
         // 1. Decrypt the validPeriod (expiry) with your RSA private key
         const rawValidPeriod = data.validPeriod; // This is the base64-encrypted string
-        const expiry = decryptRSA(rawValidPeriod, merchantPrivateKey) || 'N/A';
+        const expiry = decryptRSA(rawValidPeriod, process.env.WASABI_PRIVATE_KEY_B64) || 'N/A';
         
         // 2. Decrypt cardNumber if necessary; otherwise, use raw and mask it.
         const rawCardNumber = data.cardNumber;
         let maskedCardNumber = "";
         // Try to decrypt; if decryption fails, fall back to masking the raw value
-        const decryptedCardNumber = decryptRSA(rawCardNumber, merchantPrivateKey);
+        const decryptedCardNumber = decryptRSA(rawCardNumber, process.env.WASABI_PRIVATE_KEY_B64);
         if (decryptedCardNumber && decryptedCardNumber.length >= 4) {
           maskedCardNumber = "**** " + decryptedCardNumber.slice(-4);
         } else if (data.cardNumber && data.cardNumber.length >= 4) {
