@@ -176,7 +176,7 @@ app.post('/api/reset-2fa', async (req, res) => {
 });
 
 // Endpoint to fetch referrals for a given referral ID
-app.get('/api/referrals', async (req, res) => {
+app.get('/referrals', async (req, res) => {
   const { referralId } = req.query;
   if (!referralId) {
     return res.status(400).json({ success: false, message: "Missing referralId parameter" });
