@@ -60,6 +60,24 @@ client.connect()
   .then(() => console.log("✅ Connected to MongoDB"))
   .catch((err) => console.error("❌ Error connecting to MongoDB:", err));
 
+  async function decryptUsingMicroservice(encryptedData) {
+    if (!encryptedData) return null;
+    try {
+      const response = await fetch("https://aiacardappjava-sandbox.onrender.com/api/decrypt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data: encryptedData })
+      });
+      // Assuming the microservice returns the decrypted string as plain text
+      const decrypted = await response.text();
+      return decrypted;
+    } catch (error) {
+      console.error("Error calling decryption microservice:", error);
+      return null;
+    }
+  }
+  
+
 // Connect to MongoDB (ensure process.env.MONGODB_URI is set in your environment)
 // mongoose.connect(process.env.MONGODB_URI)
 
@@ -518,57 +536,57 @@ app.post('/get-active-cards', async (req, res) => {
     const activeCardsCount = user.activeCards || 0;
     const cardDetailsArray = [];
 
-    // Make sure merchantPrivateKey is defined/imported (from wasabiApi.js, for example)
-    // e.g., const { merchantPrivateKey } = require('./wasabiApi');
-    
     for (let i = 1; i <= activeCardsCount; i++) {
       const cardNoField = `cardNo${i}`;
-      // Update this field name to exactly match what's stored in MongoDB
-      const cardTypeField = `cardNo${i}aiaId`; // e.g. "cardNo1aiaId"
+      const cardTypeField = `cardNo${i}aiaId`;
       
       const cardNo = user[cardNoField];
-      const aiaCardId = user[cardTypeField];  // This value should be 'lite', 'pro', or 'elite'
-      if (!cardNo) continue; // Skip if no card number stored
+      const aiaCardId = user[cardTypeField];  // e.g. 'lite', 'pro', or 'elite'
+      if (!cardNo) continue;
       
       // Prepare payload for the Wasabi Card Info API call
       const payload = {
         cardNo: cardNo,
-        onlySimpleInfo: false, // Retrieve full details including balance info
+        onlySimpleInfo: false,
       };
       
       // Call Wasabi's API using your helper function
       const response = await callWasabiApi('/merchant/core/mcb/card/info', payload);
-      // Log the raw response from Wasabi API for debugging
       console.log('Raw response from Wasabi API for cardNo:', cardNo, response);
       
       if (response && response.success && response.data) {
         const data = response.data;
         
-        // 1. Decrypt the validPeriod (expiry) with your RSA private key
-        const rawValidPeriod = data.validPeriod; // This is the base64-encrypted string
-        const expiry = decryptRSA(rawValidPeriod, merchantPrivateKey) || 'N/A';
+        // Decrypt the validPeriod using the Java microservice
+        const rawValidPeriod = data.validPeriod; // encrypted expiry
+        const expiry = await decryptUsingMicroservice(rawValidPeriod) || 'N/A';
         
-        // 2. Decrypt cardNumber if necessary; otherwise, use raw and mask it.
+        // Decrypt cardNumber if necessary, then mask it (showing only the last 4 digits)
         const rawCardNumber = data.cardNumber;
         let maskedCardNumber = "";
-        // Try to decrypt; if decryption fails, fall back to masking the raw value
-        const decryptedCardNumber = decryptRSA(rawCardNumber, merchantPrivateKey);
+        const decryptedCardNumber = await decryptUsingMicroservice(rawCardNumber);
         if (decryptedCardNumber && decryptedCardNumber.length >= 4) {
           maskedCardNumber = "**** " + decryptedCardNumber.slice(-4);
         } else if (data.cardNumber && data.cardNumber.length >= 4) {
           maskedCardNumber = "**** " + data.cardNumber.slice(-4);
         }
         
-        // Extract balance from balanceInfo.amount
+        // Decrypt CVV if provided
+        let decryptedCvv = null;
+        if (data.cvv) {
+          decryptedCvv = await decryptUsingMicroservice(data.cvv);
+        }
+        
         const balance = data.balanceInfo?.amount || null;
 
-        // Build a card detail object, merging the MongoDB field (aiaCardId) with the Wasabi data.
+        // Build a card detail object merging MongoDB info with Wasabi API data
         const cardDetail = {
-          aiaCardId,               // e.g., 'lite', 'pro', or 'elite' from MongoDB
-          cardNo: data.cardNo,       // Bank Card ID from Wasabi
-          maskedCardNumber,         // e.g., "**** 2595"
-          expiry,                   // Decrypted expiry or "N/A"
-          balance,                  // Card balance
+          aiaCardId,             // e.g., 'lite', 'pro', or 'elite'
+          cardNo: data.cardNo,     // Bank Card ID from Wasabi
+          maskedCardNumber,       // e.g., "**** 2595"
+          expiry,                 // Decrypted expiry or "N/A"
+          balance,                // Card balance
+          cvv: decryptedCvv,      // Decrypted CVV, if available
           status: data.status,
           statusStr: data.statusStr,
           bindTime: data.bindTime,
@@ -587,6 +605,7 @@ app.post('/get-active-cards', async (req, res) => {
     return res.status(500).json({ success: false, message: "Server error" });
   }
 });
+
 
 // New Topup/Deposit Endpoint
 app.post('/top-up', async (req, res) => {
@@ -1865,31 +1884,33 @@ app.post('/card-details', async (req, res) => {
       return res.status(404).json({ success: false, message: "User not found" });
     }
 
-    // Ensure that the user has card information stored – only cardNumber and expiry date should be stored.
+    // Ensure that the user has card information stored
     if (!user.cardNumber || !user.holderId) {
       return res.status(400).json({ success: false, message: "Card information not available for this user." });
     }
 
     // Build the payload to call Wasabi's Card Info API.
-    // The documentation states that the Card Info API requires a cardNo and an optional onlySimpleInfo flag.
-    // We use the cardNumber stored in MongoDB.
     const payload = {
       cardNo: user.cardNumber,
-      onlySimpleInfo: false, // set false to get full details including CVV
+      onlySimpleInfo: false, // Retrieve full details including CVV
     };
 
     // Call Wasabi's API using your helper function.
-    // Note: The documented endpoint is '/merchant/core/mcb/card/info'
     const wasabiResponse = await callWasabiApi('/merchant/core/mcb/card/info', payload);
-    // console.log("WasabiCard API card info response:", wasabiResponse);
 
-    // Optionally, you could merge the stored expiry date (if needed) with the response.
-    // For example, if wasabiResponse.data does not include the expiry date, you might add it:
     if (wasabiResponse.success && wasabiResponse.data) {
-      wasabiResponse.data.expiryDate = user.expiryDate; // assuming you stored expiry date as 'expiryDate'
+      // Decrypt validPeriod using the microservice.
+      const decryptedValidPeriod = await decryptUsingMicroservice(wasabiResponse.data.validPeriod);
+      wasabiResponse.data.validPeriod = decryptedValidPeriod || user.expiryDate || 'N/A';
+
+      // If cvv is present and encrypted, decrypt it.
+      if (wasabiResponse.data.cvv) {
+        const decryptedCvv = await decryptUsingMicroservice(wasabiResponse.data.cvv);
+        wasabiResponse.data.cvv = decryptedCvv;
+      }
     }
 
-    // Return the response from Wasabi to the client.
+    // Return the response from Wasabi's API (with decrypted fields) directly to the client.
     res.json(wasabiResponse);
   } catch (error) {
     console.error("Error fetching card details:", error);
