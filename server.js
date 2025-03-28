@@ -552,7 +552,7 @@ app.post('/get-active-cards', async (req, res) => {
       
       // Call Wasabi's API using your helper function
       const response = await callWasabiApi('/merchant/core/mcb/card/info', payload);
-      console.log('Raw response from Wasabi API for cardNo:', cardNo, response);
+      // console.log('Raw response from Wasabi API for cardNo:', cardNo, response);
       
       if (response && response.success && response.data) {
         const data = response.data;
@@ -592,6 +592,7 @@ app.post('/get-active-cards', async (req, res) => {
           bindTime: data.bindTime,
           remark: data.remark,
         };
+        console.log('Full Card Details:', cardDetail);
         
         cardDetailsArray.push(cardDetail);
       } else {
