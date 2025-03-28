@@ -557,33 +557,29 @@ app.post('/get-active-cards', async (req, res) => {
       if (response && response.success && response.data) {
         const data = response.data;
         
-        // Decrypt the validPeriod using the Java microservice
-        const rawValidPeriod = data.validPeriod; // encrypted expiry
+        // Decrypt the validPeriod (expiry) using the Java microservice.
+        const rawValidPeriod = data.validPeriod; // Encrypted expiry
         const expiry = await decryptUsingMicroservice(rawValidPeriod) || 'N/A';
         
-        // Decrypt cardNumber if necessary, then mask it (showing only the last 4 digits)
+        // For cardNumber, do not attempt decryption—simply mask the last four digits.
         const rawCardNumber = data.cardNumber;
         let maskedCardNumber = "";
-        const decryptedCardNumber = await decryptUsingMicroservice(rawCardNumber);
-        if (decryptedCardNumber && decryptedCardNumber.length >= 4) {
-          maskedCardNumber = "**** " + decryptedCardNumber.slice(-4);
-        } else if (data.cardNumber && data.cardNumber.length >= 4) {
-          maskedCardNumber = "**** " + data.cardNumber.slice(-4);
+        if (rawCardNumber && rawCardNumber.length >= 4) {
+          maskedCardNumber = "**** " + rawCardNumber.slice(-4);
         }
         
-        // Decrypt CVV if provided
+        // Decrypt CVV if provided.
         let decryptedCvv = null;
         if (data.cvv) {
           decryptedCvv = await decryptUsingMicroservice(data.cvv);
         }
         
         const balance = data.balanceInfo?.amount || null;
-
-        // Build a card detail object merging MongoDB info with Wasabi API data
+        
         const cardDetail = {
           aiaCardId,             // e.g., 'lite', 'pro', or 'elite'
           cardNo: data.cardNo,     // Bank Card ID from Wasabi
-          maskedCardNumber,       // e.g., "**** 2595"
+          maskedCardNumber,       // Now simply "**** " + last 4 digits
           expiry,                 // Decrypted expiry or "N/A"
           balance,                // Card balance
           cvv: decryptedCvv,      // Decrypted CVV, if available
@@ -592,7 +588,6 @@ app.post('/get-active-cards', async (req, res) => {
           bindTime: data.bindTime,
           remark: data.remark,
         };
-        console.log('Full Card Details:', cardDetail);
         
         cardDetailsArray.push(cardDetail);
       } else {
@@ -1900,11 +1895,19 @@ app.post('/card-details', async (req, res) => {
     const wasabiResponse = await callWasabiApi('/merchant/core/mcb/card/info', payload);
 
     if (wasabiResponse.success && wasabiResponse.data) {
-      // Decrypt validPeriod using the microservice.
+      // Decrypt validPeriod (expiry) via the microservice.
       const decryptedValidPeriod = await decryptUsingMicroservice(wasabiResponse.data.validPeriod);
       wasabiResponse.data.validPeriod = decryptedValidPeriod || user.expiryDate || 'N/A';
-
-      // If cvv is present and encrypted, decrypt it.
+    
+      // For cardNumber, do not attempt decryption—mask directly.
+      const rawCardNumber = wasabiResponse.data.cardNumber;
+      if (rawCardNumber && rawCardNumber.length >= 4) {
+        wasabiResponse.data.maskedCardNumber = "**** " + rawCardNumber.slice(-4);
+      } else {
+        wasabiResponse.data.maskedCardNumber = "N/A";
+      }
+    
+      // If cvv is provided and encrypted, decrypt it.
       if (wasabiResponse.data.cvv) {
         const decryptedCvv = await decryptUsingMicroservice(wasabiResponse.data.cvv);
         wasabiResponse.data.cvv = decryptedCvv;
