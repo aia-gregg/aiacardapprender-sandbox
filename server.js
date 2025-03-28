@@ -382,12 +382,12 @@ app.post('/webhook', express.json({
       data: null
     };
     res.status(200).json(responsePayload);
-    console.log('Webhook immediately acknowledged with response:', responsePayload);
+    // console.log('Webhook immediately acknowledged with response:', responsePayload);
 
     // Process the webhook asynchronously so as not to delay the response
     setImmediate(async () => {
-      console.log('Webhook raw payload:', req.rawBody);
-      console.log('Webhook parsed payload:', req.body);
+      // console.log('Webhook raw payload:', req.rawBody);
+      // console.log('Webhook parsed payload:', req.body);
 
       // Check for a signature header if provided
       const signature = req.headers['x-signature'];
@@ -396,8 +396,8 @@ app.post('/webhook', express.json({
           .createHmac('sha256', process.env.WASABI_WEBHOOK_SECRET)
           .update(req.rawBody)
           .digest('hex');
-        console.log('Computed signature:', computedSignature);
-        console.log('Received signature:', signature);
+        // console.log('Computed signature:', computedSignature);
+        // console.log('Received signature:', signature);
         if (computedSignature !== signature) {
           console.error('Signature verification failed.');
           return;
@@ -414,7 +414,7 @@ app.post('/webhook', express.json({
       }
       // Only process webhook if type is 'create'
       if (type !== 'create') {
-        console.log(`Webhook type is ${type} (expected 'create'). Skipping processing.`);
+        // console.log(`Webhook type is ${type} (expected 'create'). Skipping processing.`);
         return;
       }
 
@@ -445,7 +445,7 @@ app.post('/webhook', express.json({
         );
 
         if (updateResult.modifiedCount > 0) {
-          console.log(`User ${user.email} updated: ${cardFieldName} set to ${cardNo}. Active cards now: ${newCardIndex}`);
+          // console.log(`User ${user.email} updated: ${cardFieldName} set to ${cardNo}. Active cards now: ${newCardIndex}`);
         } else {
           console.error('Failed to update user record with new card information.');
         }
@@ -500,7 +500,7 @@ app.post('/card-auth-transactions', async (req, res) => {
     };
 
     // Log the payload being sent
-    console.log("Sending payload to Wasabi API:", JSON.stringify(payload));
+    // console.log("Sending payload to Wasabi API:", JSON.stringify(payload));
 
     // Call Wasabi API using your existing helper function.
     const response = await callWasabiApi('/merchant/core/mcb/card/authTransaction', payload);
@@ -606,7 +606,7 @@ app.post('/get-active-cards', async (req, res) => {
 // New Topup/Deposit Endpoint
 app.post('/top-up', async (req, res) => {
   // Log the entire request body to check what is being sent - DELETE
-  console.log("Received /top-up request:", req.body);
+  // console.log("Received /top-up request:", req.body);
 
   const { cardNo, merchantOrderNo, amount } = req.body;
 
@@ -627,14 +627,14 @@ app.post('/top-up', async (req, res) => {
     amount: amount, // Already formatted as a string like "51.75"
     currency: "USD"
   };
-  console.log('Sending deposit payload to Wasabi:', JSON.stringify(depositPayload)); // DELETE
+  // console.log('Sending deposit payload to Wasabi:', JSON.stringify(depositPayload)); // DELETE
 
   try {
     // Call Wasabi deposit API using the helper function.
     const data = await callWasabiApi('/merchant/core/mcb/card/deposit', depositPayload);
 
     // 3. Log the raw response - DELETE
-    console.log('Wasabi deposit API response:', JSON.stringify(data));
+    // console.log('Wasabi deposit API response:', JSON.stringify(data));
 
     if (data.success && data.data && data.data.status === 'processing') {
       // Prepare topup record to save in MongoDB
@@ -654,10 +654,10 @@ app.post('/top-up', async (req, res) => {
       const collectionName = process.env.MONGODB_COLLECTION_TOPUP;
 
       // Log before insertion
-      console.log('Inserting topup record into MongoDB:', JSON.stringify(topupRecord));
+      // console.log('Inserting topup record into MongoDB:', JSON.stringify(topupRecord));
 
       const insertResult = await client.db(dbName).collection(collectionName).insertOne(topupRecord);
-      console.log('MongoDB insertion result:', insertResult);
+      // console.log('MongoDB insertion result:', insertResult);
 
       return res.status(200).json({ success: true, data });
     } else {
