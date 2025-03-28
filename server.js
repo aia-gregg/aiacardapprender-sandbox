@@ -1866,13 +1866,11 @@ app.post('/create-cardholder', async (req, res) => {
 // Card Details Endpoint – retrieves card info (with CVV fetched dynamically)
 app.post('/card-details', async (req, res) => {
   try {
-    // Validate that the email is provided in the request body
-    const { email } = req.body;
+    const { email, cardNo } = req.body;
     if (!email) {
       return res.status(400).json({ success: false, message: "Email is required" });
     }
 
-    // Connect to MongoDB and find the user record by email
     const database = client.db("aiacard-sandbox-db");
     const collection = database.collection("aiacard-sandox-col");
     const user = await collection.findOne({ email });
@@ -1880,47 +1878,43 @@ app.post('/card-details', async (req, res) => {
       return res.status(404).json({ success: false, message: "User not found" });
     }
 
-    // Ensure that the user has card information stored
-    if (!user.cardNumber || !user.holderId) {
+    // Use the passed cardNo if available; otherwise, fallback to user.cardNumber
+    const effectiveCardNo = cardNo || user.cardNumber;
+    if (!effectiveCardNo || !user.holderId) {
       return res.status(400).json({ success: false, message: "Card information not available for this user." });
     }
 
-    // Build the payload to call Wasabi's Card Info API.
     const payload = {
-      cardNo: user.cardNumber,
-      onlySimpleInfo: false, // Retrieve full details including CVV
+      cardNo: effectiveCardNo,
+      onlySimpleInfo: false,
     };
 
-    // Call Wasabi's API using your helper function.
     const wasabiResponse = await callWasabiApi('/merchant/core/mcb/card/info', payload);
 
     if (wasabiResponse.success && wasabiResponse.data) {
-      // Decrypt validPeriod (expiry) via the microservice.
       const decryptedValidPeriod = await decryptUsingMicroservice(wasabiResponse.data.validPeriod);
       wasabiResponse.data.validPeriod = decryptedValidPeriod || user.expiryDate || 'N/A';
-    
-      // For cardNumber, do not attempt decryption—mask directly.
+
       const rawCardNumber = wasabiResponse.data.cardNumber;
       if (rawCardNumber && rawCardNumber.length >= 4) {
         wasabiResponse.data.maskedCardNumber = "**** " + rawCardNumber.slice(-4);
       } else {
         wasabiResponse.data.maskedCardNumber = "N/A";
       }
-    
-      // If cvv is provided and encrypted, decrypt it.
+
       if (wasabiResponse.data.cvv) {
         const decryptedCvv = await decryptUsingMicroservice(wasabiResponse.data.cvv);
         wasabiResponse.data.cvv = decryptedCvv;
       }
     }
 
-    // Return the response from Wasabi's API (with decrypted fields) directly to the client.
     res.json(wasabiResponse);
   } catch (error) {
     console.error("Error fetching card details:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
+
 
 app.post('/create-vault-account', async (req, res) => {
   try {
