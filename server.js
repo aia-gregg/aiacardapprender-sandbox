@@ -367,8 +367,9 @@ app.post('/openCard', async (req, res) => {
 });
 
 
-// Webhook endpoint for Wasabi API
-app.post('/webhook', express.json({
+app.post(
+  '/webhook',
+  express.json({
     verify: (req, res, buf) => {
       req.rawBody = buf.toString();
     },
@@ -382,12 +383,12 @@ app.post('/webhook', express.json({
       data: null
     };
     res.status(200).json(responsePayload);
-    // console.log('Webhook immediately acknowledged with response:', responsePayload);
+    console.log('Webhook immediately acknowledged with response:', responsePayload);
 
     // Process the webhook asynchronously so as not to delay the response
     setImmediate(async () => {
-      // console.log('Webhook raw payload:', req.rawBody);
-      // console.log('Webhook parsed payload:', req.body);
+      console.log('Webhook raw payload:', req.rawBody);
+      console.log('Webhook parsed payload:', req.body);
 
       // Check for a signature header if provided
       const signature = req.headers['x-signature'];
@@ -396,8 +397,8 @@ app.post('/webhook', express.json({
           .createHmac('sha256', process.env.WASABI_WEBHOOK_SECRET)
           .update(req.rawBody)
           .digest('hex');
-        // console.log('Computed signature:', computedSignature);
-        // console.log('Received signature:', signature);
+        console.log('Computed signature:', computedSignature);
+        console.log('Received signature:', signature);
         if (computedSignature !== signature) {
           console.error('Signature verification failed.');
           return;
@@ -406,15 +407,38 @@ app.post('/webhook', express.json({
         console.warn('No signature header found.');
       }
 
-      // Extract key parameters from the webhook payload
+      // Check for the notification category header
+      const category = req.headers['x-wsb-category'];
+      if (category) {
+        // Branch based on the notification category without affecting original logic
+        switch (category) {
+          case 'card_transaction':
+            // Handle card transaction notifications (e.g., "create", "deposit", etc.)
+            await processCardTransaction(req.body);
+            break;
+          case 'card_auth_transaction':
+            // Handle card authorization transaction notifications
+            await processCardAuthTransaction(req.body);
+            break;
+          case 'card_fee_patch':
+            // Handle card authorization transaction reversal notifications
+            await processCardFeePatch(req.body);
+            break;
+          default:
+            console.warn('Unhandled notification category:', category);
+        }
+        // Exit since notifications have been handled
+        return;
+      }
+
+      // If no notification category header is present, use the original webhook logic
       const { orderNo, cardNo, type } = req.body;
       if (!orderNo || !cardNo) {
         console.error('Missing orderNo or cardNo in webhook payload.');
         return;
       }
-      // Only process webhook if type is 'create'
       if (type !== 'create') {
-        // console.log(`Webhook type is ${type} (expected 'create'). Skipping processing.`);
+        console.log(`Webhook type is ${type} (expected 'create'). Skipping processing.`);
         return;
       }
 
@@ -438,14 +462,14 @@ app.post('/webhook', express.json({
         // Update the user record: add the new cardNo field, increment activeCards, and overwrite orderNo with ""
         const updateResult = await collection.updateOne(
           { _id: user._id },
-          { 
+          {
             $set: { [cardFieldName]: cardNo, orderNo: "" },
             $inc: { activeCards: 1 }
           }
         );
 
         if (updateResult.modifiedCount > 0) {
-          // console.log(`User ${user.email} updated: ${cardFieldName} set to ${cardNo}. Active cards now: ${newCardIndex}`);
+          console.log(`User ${user.email} updated: ${cardFieldName} set to ${cardNo}. Active cards now: ${newCardIndex}`);
         } else {
           console.error('Failed to update user record with new card information.');
         }
@@ -455,6 +479,86 @@ app.post('/webhook', express.json({
     });
   }
 );
+
+// Helper function to process Card Transaction notifications
+async function processCardTransaction(payload) {
+  const { orderNo, cardNo, type } = payload;
+  if (!orderNo || !cardNo) {
+    console.error('Missing orderNo or cardNo in card transaction payload.');
+    return;
+  }
+  // Example: Process only 'create' type; add additional handling as needed.
+  if (type !== 'create') {
+    console.log(`Card transaction type is ${type}. No processing implemented for this type.`);
+    return;
+  }
+  try {
+    const database = client.db("aiacard-sandbox-db");
+    const collection = database.collection("aiacard-sandox-col");
+
+    const user = await collection.findOne({ orderNo });
+    if (!user) {
+      console.error(`No user found with orderNo: ${orderNo}`);
+      return;
+    }
+
+    const activeCards = user.activeCards || 0;
+    const newCardIndex = activeCards + 1;
+    const cardFieldName = `cardNo${newCardIndex}`;
+    const updateResult = await collection.updateOne(
+      { _id: user._id },
+      {
+        $set: { [cardFieldName]: cardNo, orderNo: "" },
+        $inc: { activeCards: 1 }
+      }
+    );
+    if (updateResult.modifiedCount > 0) {
+      console.log(`(Notification) User ${user.email} updated: ${cardFieldName} set to ${cardNo}.`);
+    } else {
+      console.error('(Notification) Failed to update user record for card transaction.');
+    }
+  } catch (error) {
+    console.error('Error processing card transaction notification:', error);
+  }
+}
+
+// Helper function to process Card Authorization Transaction notifications
+async function processCardAuthTransaction(payload) {
+  // Destructure necessary fields from the payload; add more fields as needed
+  const { cardNo, tradeNo } = payload;
+  if (!cardNo || !tradeNo) {
+    console.error('Missing cardNo or tradeNo in card auth transaction payload.');
+    return;
+  }
+  console.log('Processing card auth transaction notification:', payload);
+  try {
+    const database = client.db("aiacard-sandbox-db");
+    // Log the entire payload into a dedicated collection for card auth transactions
+    const collection = database.collection("cardAuthTransactions");
+    await collection.insertOne(payload);
+    console.log(`(Notification) Card auth transaction for tradeNo ${tradeNo} logged successfully.`);
+  } catch (error) {
+    console.error('Error processing card auth transaction notification:', error);
+  }
+}
+
+// Helper function to process Card Authorization Transaction Reversal notifications
+async function processCardFeePatch(payload) {
+  const { cardNo, tradeNo, originTradeNo } = payload;
+  if (!cardNo || !tradeNo || !originTradeNo) {
+    console.error('Missing required fields in card fee patch payload.');
+    return;
+  }
+  console.log('Processing card fee patch (reversal) notification:', payload);
+  try {
+    const database = client.db("aiacard-sandbox-db");
+    const collection = database.collection("cardFeePatchTransactions");
+    await collection.insertOne(payload);
+    console.log(`(Notification) Card fee patch transaction for tradeNo ${tradeNo} logged successfully.`);
+  } catch (error) {
+    console.error('Error processing card fee patch notification:', error);
+  }
+}
 
 
 // // A helper function to decrypt a base64-encoded field from Wasabi using your RSA private key.
