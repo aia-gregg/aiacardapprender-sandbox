@@ -366,7 +366,8 @@ app.post('/openCard', async (req, res) => {
   }
 });
 
-
+// Webhook API
+// Webhook API
 app.post(
   '/webhook',
   express.json({
@@ -380,101 +381,105 @@ app.post(
       success: true,
       code: 200,
       msg: "Success",
-      data: null
+      data: null,
     };
     res.status(200).json(responsePayload);
-    console.log('Webhook immediately acknowledged with response:', responsePayload);
+    console.log('Webhook acknowledged:', responsePayload);
 
-    // Process the webhook asynchronously so as not to delay the response
+    // Process the webhook asynchronously
     setImmediate(async () => {
-      console.log('Webhook raw payload:', req.rawBody);
-      console.log('Webhook parsed payload:', req.body);
+      try {
+        console.log('Webhook raw payload:', req.rawBody);
+        console.log('Webhook parsed payload:', req.body);
 
-      // Check for a signature header if provided
-      const signature = req.headers['x-signature'];
-      if (signature) {
-        const computedSignature = crypto
-          .createHmac('sha256', process.env.WASABI_WEBHOOK_SECRET)
-          .update(req.rawBody)
-          .digest('hex');
-        console.log('Computed signature:', computedSignature);
-        console.log('Received signature:', signature);
-        if (computedSignature !== signature) {
-          console.error('Signature verification failed.');
+        // Verify signature if provided
+        const signature = req.headers['x-signature'];
+        if (signature) {
+          const computedSignature = crypto
+            .createHmac('sha256', process.env.WASABI_WEBHOOK_SECRET)
+            .update(req.rawBody)
+            .digest('hex');
+          if (computedSignature !== signature) {
+            console.error('Signature verification failed.');
+            return;
+          }
+        } else {
+          console.warn('No signature header found.');
+        }
+
+        // Check for notification category header
+        const category = req.headers['x-wsb-category'];
+        if (category) {
+          console.log('Notification category:', category);
+          // Process category-based notifications concurrently
+          switch (category) {
+            case 'card_transaction':
+              processCardTransaction(req.body).catch(err =>
+                console.error('Error processing card_transaction:', err)
+              );
+              break;
+            case 'card_auth_transaction':
+              processCardAuthTransaction(req.body).catch(err =>
+                console.error('Error processing card_auth_transaction:', err)
+              );
+              break;
+            case 'card_fee_patch':
+              processCardFeePatch(req.body).catch(err =>
+                console.error('Error processing card_fee_patch:', err)
+              );
+              break;
+            default:
+              console.warn('Unhandled notification category:', category);
+          }
+          return; // Exit if category handled
+        }
+
+        // Fallback processing if no category header
+        const { orderNo, cardNo, type } = req.body;
+        if (!orderNo || !cardNo) {
+          console.error('Missing orderNo or cardNo in webhook payload.');
           return;
         }
-      } else {
-        console.warn('No signature header found.');
-      }
-
-      // Check for the notification category header
-      const category = req.headers['x-wsb-category'];
-      if (category) {
-        // Branch based on the notification category without affecting original logic
-        switch (category) {
-          case 'card_transaction':
-            // Handle card transaction notifications (e.g., "create", "deposit", etc.)
-            await processCardTransaction(req.body);
-            break;
-          case 'card_auth_transaction':
-            // Handle card authorization transaction notifications
-            await processCardAuthTransaction(req.body);
-            break;
-          case 'card_fee_patch':
-            // Handle card authorization transaction reversal notifications
-            await processCardFeePatch(req.body);
-            break;
-          default:
-            console.warn('Unhandled notification category:', category);
+        if (type !== 'create') {
+          console.log(`Webhook type is ${type} (expected 'create'). Skipping processing.`);
+          return;
         }
-        // Exit since notifications have been handled
-        return;
-      }
 
-      // If no notification category header is present, use the original webhook logic
-      const { orderNo, cardNo, type } = req.body;
-      if (!orderNo || !cardNo) {
-        console.error('Missing orderNo or cardNo in webhook payload.');
-        return;
-      }
-      if (type !== 'create') {
-        console.log(`Webhook type is ${type} (expected 'create'). Skipping processing.`);
-        return;
-      }
-
-      try {
+        // Connect to the database
         const database = client.db("aiacard-sandbox-db");
         const collection = database.collection("aiacard-sandox-col");
 
-        // Lookup the user by orderNo only
-        const user = await collection.findOne({ orderNo: orderNo });
+        // Find the user by orderNo (ensure this field is indexed)
+        const user = await collection.findOne({ orderNo });
         if (!user) {
           console.error(`No user found with orderNo: ${orderNo}`);
           return;
         }
 
-        // Determine the current number of active cards (default to 0 if not set)
+        // Calculate new card index and field name
         const activeCards = user.activeCards || 0;
         const newCardIndex = activeCards + 1;
-        // Create a new field name, e.g., "cardNo1", "cardNo2", etc.
         const cardFieldName = `cardNo${newCardIndex}`;
 
-        // Update the user record: add the new cardNo field, increment activeCards, and overwrite orderNo with ""
-        const updateResult = await collection.updateOne(
+        // Update the user record concurrently with other operations
+        const updatePromise = collection.updateOne(
           { _id: user._id },
           {
             $set: { [cardFieldName]: cardNo, orderNo: "" },
-            $inc: { activeCards: 1 }
+            $inc: { activeCards: 1 },
           }
         );
 
+        // Optionally, you can fire off additional operations in parallel here.
+
+        const updateResult = await updatePromise;
         if (updateResult.modifiedCount > 0) {
-          console.log(`User ${user.email} updated: ${cardFieldName} set to ${cardNo}. Active cards now: ${newCardIndex}`);
+          console.log(`User ${user.email} updated: ${cardFieldName} set to ${cardNo}. Active cards: ${newCardIndex}`);
         } else {
           console.error('Failed to update user record with new card information.');
         }
-      } catch (dbError) {
-        console.error('Error updating MongoDB with card details:', dbError);
+      } catch (err) {
+        console.error('Error processing webhook:', err);
       }
     });
   }
@@ -646,14 +651,10 @@ function decryptRSA(encryptedBase64, privateKey) {
   }
 }
 
-// Endpoint to pull actual card auth transactions from Wasabi API
+// Endpoint to pull card authorization transactions from Wasabi API
 app.post('/card-auth-transactions', async (req, res) => {
   try {
-    // Extract required and optional parameters from the request body.
-    // pageNum and pageSize are required; cardNo, type, tradeNo, startTime, and endTime are optional.
     const { pageNum, pageSize, cardNo, type, tradeNo, startTime, endTime } = req.body;
-    
-    // Build the payload to send to Wasabi's card auth transaction API.
     const payload = {
       pageNum: pageNum || 1,
       pageSize: pageSize || 10,
@@ -664,19 +665,12 @@ app.post('/card-auth-transactions', async (req, res) => {
       ...(endTime && { endTime }),
     };
 
-    // Log the payload being sent
-    // console.log("Sending payload to Wasabi API:", JSON.stringify(payload));
-
-    // Call Wasabi API using your existing helper function.
+    console.log('Sending payload to Wasabi API:', JSON.stringify(payload));
     const response = await callWasabiApi('/merchant/core/mcb/card/authTransaction', payload);
-    
-    // Log the response received from Wasabi API
-    // console.log("Received response from Wasabi API:", JSON.stringify(response));
-
-    // Return the response from Wasabi's API directly to the client.
+    console.log('Received response from Wasabi API:', JSON.stringify(response));
     res.status(200).json(response);
   } catch (error) {
-    console.error("Error fetching card auth transactions:", error);
+    console.error('Error fetching card auth transactions:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
