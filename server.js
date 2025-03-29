@@ -487,7 +487,6 @@ async function processCardTransaction(payload) {
     console.error('Missing orderNo or cardNo in card transaction payload.');
     return;
   }
-  // Example: Process only 'create' type; add additional handling as needed.
   if (type !== 'create') {
     console.log(`Card transaction type is ${type}. No processing implemented for this type.`);
     return;
@@ -514,6 +513,16 @@ async function processCardTransaction(payload) {
     );
     if (updateResult.modifiedCount > 0) {
       console.log(`(Notification) User ${user.email} updated: ${cardFieldName} set to ${cardNo}.`);
+      
+      // Insert a notification document
+      const notificationData = {
+        title: "Card Transaction",
+        desc: `New card transaction processed (${type}) for card ${cardNo}.`,
+        notifyTime: new Date(),
+        userNotify: user.holderId  // or "All" if applicable
+      };
+      await insertNotification(notificationData);
+      
     } else {
       console.error('(Notification) Failed to update user record for card transaction.');
     }
@@ -522,9 +531,20 @@ async function processCardTransaction(payload) {
   }
 }
 
+// Helper function to insert a notification document into the notifications collection
+async function insertNotification(notificationData) {
+  try {
+    const notificationsDb = client.db("aiacard-sandbox-notify");
+    const notificationsCollection = notificationsDb.collection("aiacard-sandnotify-col");
+    await notificationsCollection.insertOne(notificationData);
+    console.log("Notification inserted:", notificationData);
+  } catch (error) {
+    console.error("Error inserting notification:", error);
+  }
+}
+
 // Helper function to process Card Authorization Transaction notifications
 async function processCardAuthTransaction(payload) {
-  // Destructure necessary fields from the payload; add more fields as needed
   const { cardNo, tradeNo } = payload;
   if (!cardNo || !tradeNo) {
     console.error('Missing cardNo or tradeNo in card auth transaction payload.');
@@ -533,16 +553,24 @@ async function processCardAuthTransaction(payload) {
   console.log('Processing card auth transaction notification:', payload);
   try {
     const database = client.db("aiacard-sandbox-db");
-    // Log the entire payload into a dedicated collection for card auth transactions
     const collection = database.collection("cardAuthTransactions");
     await collection.insertOne(payload);
     console.log(`(Notification) Card auth transaction for tradeNo ${tradeNo} logged successfully.`);
+    
+    // Insert a notification for card auth transactions
+    const notificationData = {
+      title: "Card Authorization",
+      desc: `Authorization transaction for card ${cardNo} (Trade: ${tradeNo}) processed.`,
+      notifyTime: new Date(),
+      userNotify: payload.holderId || "All"  // Adjust if payload contains holderId
+    };
+    await insertNotification(notificationData);
+    
   } catch (error) {
     console.error('Error processing card auth transaction notification:', error);
   }
 }
 
-// Helper function to process Card Authorization Transaction Reversal notifications
 async function processCardFeePatch(payload) {
   const { cardNo, tradeNo, originTradeNo } = payload;
   if (!cardNo || !tradeNo || !originTradeNo) {
@@ -555,10 +583,43 @@ async function processCardFeePatch(payload) {
     const collection = database.collection("cardFeePatchTransactions");
     await collection.insertOne(payload);
     console.log(`(Notification) Card fee patch transaction for tradeNo ${tradeNo} logged successfully.`);
+    
+    // Insert a notification document
+    const notificationData = {
+      title: "Card Authorization Reversal",
+      desc: `Reversal processed for card ${cardNo} (Trade: ${tradeNo}).`,
+      notifyTime: new Date(),
+      userNotify: payload.holderId || "All"  // Adjust accordingly
+    };
+    await insertNotification(notificationData);
+    
   } catch (error) {
     console.error('Error processing card fee patch notification:', error);
   }
 }
+
+// New endpoint to fetch notifications from the dedicated notifications database/collection
+app.get('/notifications', async (req, res) => {
+  try {
+    const database = client.db("aiacard-sandbox-notify");
+    const collection = database.collection("aiacard-sandnotify-col");
+
+    // Optional filtering: if a "user" query parameter is provided,
+    // return notifications where userNotify is either the given holderId or "All".
+    let query = {};
+    if (req.query.user) {
+      const userNotify = req.query.user;
+      query = { userNotify: { $in: [userNotify, "All"] } };
+    }
+
+    // Retrieve all notifications sorted by notifyTime descending
+    const notifications = await collection.find(query).sort({ notifyTime: -1 }).toArray();
+    res.status(200).json({ success: true, notifications });
+  } catch (error) {
+    console.error("Error fetching notifications:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
 
 
 // // A helper function to decrypt a base64-encoded field from Wasabi using your RSA private key.
