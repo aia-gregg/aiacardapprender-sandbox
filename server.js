@@ -1010,6 +1010,38 @@ app.post('/verify-otp', async (req, res) => {
   }
 });
 
+// New endpoint for token-based biometric auto-login (refresh token endpoint)
+app.post('/refresh-token', async (req, res) => {
+  const { email, refreshToken } = req.body;
+  if (!email || !refreshToken) {
+    return res.status(400).json({ success: false, message: "Email and refresh token are required." });
+  }
+  try {
+    // Verify the refresh token using the refresh secret (fallback to secretKey if not set)
+    let decoded;
+    try {
+      decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET || secretKey);
+    } catch (err) {
+      return res.status(401).json({ success: false, message: "Invalid refresh token." });
+    }
+    if (decoded.email !== email) {
+      return res.status(401).json({ success: false, message: "Refresh token does not match the provided email." });
+    }
+    // Optionally, you could check against a stored refresh token in your database if needed.
+
+    // Generate a new access token
+    const newAccessToken = jwt.sign(
+      { email },
+      process.env.JWT_SECRET || secretKey,
+      { expiresIn: '1h' }
+    );
+    return res.status(200).json({ success: true, accessToken: newAccessToken });
+  } catch (error) {
+    console.error("Error in /refresh-token:", error);
+    return res.status(500).json({ success: false, message: "Server error", error: error.message });
+  }
+});
+
 // Login & OTP Send Endpoint
 app.post('/login', async (req, res) => {
   try {
@@ -1022,8 +1054,6 @@ app.post('/login', async (req, res) => {
       return res.status(401).json({ success: false, message: "Invalid username or password." });
     }
 
-    // console.log("Stored password:", user.password, "Provided password:", password);
-
     if (!user.password) {
       return res.status(500).json({ success: false, message: "User password is missing from the database." });
     }
@@ -1032,6 +1062,19 @@ app.post('/login', async (req, res) => {
       return res.status(401).json({ success: false, message: "Invalid username or password." });
     }
 
+    // Generate tokens
+    const accessToken = jwt.sign(
+      { id: user._id, email: user.email },
+      process.env.JWT_SECRET || secretKey,
+      { expiresIn: '1h' }
+    );
+    const refreshToken = jwt.sign(
+      { id: user._id, email: user.email },
+      process.env.JWT_REFRESH_SECRET || secretKey,
+      { expiresIn: '7d' }
+    );
+
+    // Generate OTP for additional login verification
     const otp = generateOTP();
     const otpExpiry = new Date(Date.now() + 10 * 60000);
     console.log(`🔑 Generated Login OTP for ${email}: ${otp}`);
@@ -1045,11 +1088,12 @@ app.post('/login', async (req, res) => {
       text: `Your OTP code for login is: ${otp}. It is valid for 10 minutes.`
     });
 
-    // Modified /login endpoint:
     return res.status(200).json({
       success: true,
       requiresOTP: true,
       message: "OTP sent for login verification.",
+      accessToken,           // Newly generated access token
+      refreshToken,          // Newly generated refresh token
       user: {
         firstName: user.firstName,
         lastName: user.lastName,
