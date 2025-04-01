@@ -1186,6 +1186,80 @@ app.post('/login', async (req, res) => {
   }
 });
 
+// Biometric Login & OTP Send Endpoint
+app.post('/biometric-login', async (req, res) => {
+  const { email, refreshToken } = req.body;
+  if (!email || !refreshToken) {
+    return res.status(400).json({ success: false, message: "Email and refresh token are required." });
+  }
+  try {
+    // Verify the refresh token
+    let decoded;
+    try {
+      decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET || secretKey);
+    } catch (err) {
+      return res.status(401).json({ success: false, message: "Invalid refresh token." });
+    }
+    if (decoded.email !== email) {
+      return res.status(401).json({ success: false, message: "Refresh token does not match the provided email." });
+    }
+    // Fetch user data from your database
+    const database = client.db("aiacard-sandbox-db");
+    const collection = database.collection("aiacard-sandox-col");
+    const user = await collection.findOne({ email });
+    if (!user) {
+      return res.status(401).json({ success: false, message: "Invalid user." });
+    }
+    // Generate new tokens if needed
+    const accessToken = jwt.sign(
+      { id: user._id, email: user.email },
+      process.env.JWT_SECRET || secretKey,
+      { expiresIn: '1h' }
+    );
+    const newRefreshToken = jwt.sign(
+      { id: user._id, email: user.email },
+      process.env.JWT_REFRESH_SECRET || secretKey,
+      { expiresIn: '7d' }
+    );
+    // Generate OTP for login verification
+    const otp = generateOTP();
+    const otpExpiry = new Date(Date.now() + 10 * 60000);
+    console.log(`🔑 Generated Biometric Login OTP for ${email}: ${otp}`);
+    await collection.updateOne({ email }, { $set: { otp, otpExpiry } });
+    await transporter.sendMail({
+      from: "verify@card.aianalysis.group",
+      to: email,
+      subject: "Your Login OTP Code",
+      text: `Your OTP code for login is: ${otp}. It is valid for 10 minutes.`
+    });
+    return res.status(200).json({
+      success: true,
+      requiresOTP: true,
+      message: "OTP sent for biometric login verification.",
+      accessToken,
+      refreshToken: newRefreshToken,
+      user: {
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        photo: user.photo,
+        birthday: user.birthday,
+        address: user.address,
+        town: user.town,
+        postCode: user.postCode,
+        country: user.country,
+        referralId: user.referralId,
+        holderId: user.holderId,
+        isGAVerified: user.isGAVerified,
+        yourReferralId: user.yourReferralId,
+      }
+    });
+  } catch (error) {
+    console.error("Error in /biometric-login:", error);
+    return res.status(500).json({ success: false, message: "Server error", error: error.message });
+  }
+});
+
 // Resend OTP for Login
 app.post('/resend-login-otp', async (req, res) => {
   try {
