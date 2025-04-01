@@ -4,7 +4,7 @@ const cors = require('cors');
 const bcryptjs = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, Decimal128 } = require('mongodb');
 const crypto = require('crypto');
 const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
 const stripe = require('stripe')('sk_test_51Qy1IkDO1xHmcck34QjJM47p4jkKFGViTuIVlbY1njZqObWxc9hWMvrWCsiSVgCRd08Xx1fyfXYG90Hxw6yl84WO00Xt3GGTjU'); // Test secret key
@@ -366,11 +366,79 @@ app.post('/openCard', async (req, res) => {
   }
 });
 
+async function handleReferralReward(user, cardNo) {
+  if (!user || !user.referralId) return;
+
+  const referralDb = client.db("aiacard-sandbox-refer");
+  const referralCol = referralDb.collection("aiacard-sandrefer-col");
+
+  // 1. Get the highest card index for cardNo{X}aiaId
+  const activeCards = user.activeCards || 0;
+  const lastCardAiaIdField = `cardNo${activeCards}aiaId`;
+  const cardNoaiaId = user[lastCardAiaIdField];
+
+  // 2. Determine base value from card type
+  let cardBaseValue = 0;
+  switch (cardNoaiaId) {
+    case 'lite':
+      cardBaseValue = 4.9;
+      break;
+    case 'pro':
+      cardBaseValue = 9.9;
+      break;
+    case 'elite':
+      cardBaseValue = 14.9;
+      break;
+    default:
+      console.warn(`Unknown card type: ${cardNoaiaId}`);
+      return;
+  }
+
+  // 3. Determine multiplier from refereeTier
+  const refereeTier = user.refereeTier || 1;
+  let refereeMultiplier = 1;
+  switch (refereeTier) {
+    case 2:
+      refereeMultiplier = 1.5;
+      break;
+    case 3:
+      refereeMultiplier = 2;
+      break;
+    case 4:
+      refereeMultiplier = 2.5;
+      break;
+    case 5:
+      refereeMultiplier = 3;
+      break;
+  }
+
+  // 4. Calculate commission
+  const commission = Decimal128.fromString((cardBaseValue * refereeMultiplier).toFixed(2));
+
+  // 5. Prepare record
+  const record = {
+    createTime: new Date(),
+    cardNo,
+    fullName: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+    refereeTier,
+    commission,
+    rewardStatus: "Pending",
+    referralId: user.referralId,
+    cardNoaiaId
+  };
+
+  // 6. Insert into referral DB
+  try {
+    await referralCol.insertOne(record);
+    console.log("🎯 Referral reward record inserted:", record);
+  } catch (err) {
+    console.error("❌ Failed to insert referral reward record:", err);
+  }
+}
+
 // Webhook API
 // Webhook API
-app.post(
-  '/webhook',
-  express.json({
+app.post( '/webhook', express.json({
     verify: (req, res, buf) => {
       req.rawBody = buf.toString();
     },
@@ -475,9 +543,11 @@ app.post(
         const updateResult = await updatePromise;
         if (updateResult.modifiedCount > 0) {
           console.log(`User ${user.email} updated: ${cardFieldName} set to ${cardNo}. Active cards: ${newCardIndex}`);
+          await handleReferralReward(user, cardNo);
         } else {
           console.error('Failed to update user record with new card information.');
         }
+        
       } catch (err) {
         console.error('Error processing webhook:', err);
       }
