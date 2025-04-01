@@ -524,8 +524,8 @@ async function processCardTransaction(payload) {
       
       // Insert a notification document
       const notificationData = {
-        title: "Card Transaction",
-        desc: `Your new card ending ${maskedCardNo} has been successfully created.`,
+        title: "Card Activation",
+        desc: `Your new card ending ${maskedCardNo} has been successfully created and activated. Happy spending!`,
         notifyTime: new Date(),
         userNotify: user.holderId  // or "All" if applicable
       };
@@ -570,8 +570,8 @@ async function processCardAuthTransaction(payload) {
     
     // Build a more user-friendly description using merchantName and amount
     const notificationData = {
-      title: "Card Authorization",
-      desc: `Authorization transaction for card ending ${maskedCardNo} processed for ${merchantName} for an amount of ${amount}.`,
+      title: "Transaction",
+      desc: `Authorization transaction for ${currency} ${amount} from card ending ${maskedCardNo} has been processed at ${merchantName}.`,
       notifyTime: new Date(),
       userNotify: payload.holderId || "All" // Adjust if payload contains a specific holderId
     };
@@ -602,8 +602,8 @@ async function processCardFeePatch(payload) {
     
     // Build a more user-friendly notification description
     const notificationData = {
-      title: "Card Authorization Reversal",
-      desc: `Reversal processed for card ending ${maskedCardNo} for an amount of ${amount} ${currency}.`,
+      title: "Transaction Reversal",
+      desc: `Reversal processed for ${currency} ${amount} for card ending ${maskedCardNo}.`,
       notifyTime: new Date(),
       userNotify: payload.holderId || "All"  // Adjust if payload contains a specific holderId
     };
