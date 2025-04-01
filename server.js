@@ -518,11 +518,14 @@ async function processCardTransaction(payload) {
     );
     if (updateResult.modifiedCount > 0) {
       console.log(`(Notification) User ${user.email} updated: ${cardFieldName} set to ${cardNo}.`);
+
+      // Create a masked card number (last 4 digits)
+      const maskedCardNo = "**** " + cardNo.slice(-4);
       
       // Insert a notification document
       const notificationData = {
         title: "Card Transaction",
-        desc: `New card transaction processed (${type}) for card ${cardNo}.`,
+        desc: `Your new card ending ${maskedCardNo} has been successfully created.`,
         notifyTime: new Date(),
         userNotify: user.holderId  // or "All" if applicable
       };
@@ -550,9 +553,9 @@ async function insertNotification(notificationData) {
 
 // Helper function to process Card Authorization Transaction notifications
 async function processCardAuthTransaction(payload) {
-  const { cardNo, tradeNo } = payload;
-  if (!cardNo || !tradeNo) {
-    console.error('Missing cardNo or tradeNo in card auth transaction payload.');
+  const { cardNo, merchantName, amount } = payload;
+  if (!cardNo || !merchantName || amount == null) {
+    console.error('Missing cardNo, merchantName, or amount in card auth transaction payload.');
     return;
   }
   console.log('Processing card auth transaction notification:', payload);
@@ -560,15 +563,19 @@ async function processCardAuthTransaction(payload) {
     const database = client.db("aiacard-sandbox-db");
     const collection = database.collection("cardAuthTransactions");
     await collection.insertOne(payload);
-    console.log(`(Notification) Card auth transaction for tradeNo ${tradeNo} logged successfully.`);
+    console.log(`(Notification) Card auth transaction logged successfully.`);
     
-    // Insert a notification for card auth transactions
+    // Create a masked card number using the last four digits
+    const maskedCardNo = "**** " + cardNo.slice(-4);
+    
+    // Build a more user-friendly description using merchantName and amount
     const notificationData = {
       title: "Card Authorization",
-      desc: `Authorization transaction for card ${cardNo} (Trade: ${tradeNo}) processed.`,
+      desc: `Authorization transaction for card ending ${maskedCardNo} processed for ${merchantName} for an amount of ${amount}.`,
       notifyTime: new Date(),
-      userNotify: payload.holderId || "All"  // Adjust if payload contains holderId
+      userNotify: payload.holderId || "All" // Adjust if payload contains a specific holderId
     };
+    
     await insertNotification(notificationData);
     
   } catch (error) {
@@ -576,9 +583,10 @@ async function processCardAuthTransaction(payload) {
   }
 }
 
+// Helper function to process Card Authorization Reversal Transaction notifications
 async function processCardFeePatch(payload) {
-  const { cardNo, tradeNo, originTradeNo } = payload;
-  if (!cardNo || !tradeNo || !originTradeNo) {
+  const { cardNo, tradeNo, originTradeNo, currency, amount } = payload;
+  if (!cardNo || !tradeNo || !originTradeNo || !currency || amount == null) {
     console.error('Missing required fields in card fee patch payload.');
     return;
   }
@@ -589,12 +597,15 @@ async function processCardFeePatch(payload) {
     await collection.insertOne(payload);
     console.log(`(Notification) Card fee patch transaction for tradeNo ${tradeNo} logged successfully.`);
     
-    // Insert a notification document
+    // Create a masked card number using the last 4 digits
+    const maskedCardNo = "**** " + cardNo.slice(-4);
+    
+    // Build a more user-friendly notification description
     const notificationData = {
       title: "Card Authorization Reversal",
-      desc: `Reversal processed for card ${cardNo} (Trade: ${tradeNo}).`,
+      desc: `Reversal processed for card ending ${maskedCardNo} for an amount of ${amount} ${currency}.`,
       notifyTime: new Date(),
-      userNotify: payload.holderId || "All"  // Adjust accordingly
+      userNotify: payload.holderId || "All"  // Adjust if payload contains a specific holderId
     };
     await insertNotification(notificationData);
     
