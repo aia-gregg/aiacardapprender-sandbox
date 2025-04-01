@@ -2007,15 +2007,16 @@ app.post('/payment-sheet', async (req, res) => {
 
 // Create Cardholder Endpoint & Open Card Integration
 app.post('/create-cardholder', async (req, res) => {
-    try {
-      const { email, aiaCardId } = req.body;
-      if (!email) {
-        return res.status(400).json({ success: false, message: "Email is required" });
-      }
+  try {
+    const { email, aiaCardId } = req.body;
+    if (!email) {
+      return res.status(400).json({ success: false, message: "Email is required" });
+    }
 
     const database = client.db("aiacard-sandbox-db");
     const collection = database.collection("aiacard-sandox-col");
     const user = await collection.findOne({ email });
+
     if (!user) {
       return res.status(404).json({ success: false, message: "User not found" });
     }
@@ -2031,8 +2032,9 @@ app.post('/create-cardholder', async (req, res) => {
     }
 
     let holderId = user.holderId;
+
     if (!holderId) {
-      // Create payload with an empty holderId if it doesn't exist
+      // Prepare Wasabi payload
       const payload = {
         firstName: user.firstName,
         lastName: user.lastName,
@@ -2045,27 +2047,39 @@ app.post('/create-cardholder', async (req, res) => {
         postCode: user.postCode,
         country: user.country,
         cardTypeId: 111016,
-        holderId: ''  // Placeholder, will be filled by the Wasabi API
+        holderId: '' // Placeholder
       };
 
-      // Call the Wasabi API to create a new cardholder
+      // Call Wasabi API
       const wasabiResult = await callWasabiApi("/merchant/core/mcb/card/holder/create", payload);
-      // console.log("WasabiCard API response:", wasabiResult);
-
-      // Retrieve the new holderId from the API response
       holderId = wasabiResult.data.holderId;
 
-      // Update the user's record with the newly created holderId
-      await collection.updateOne({ email: user.email }, { $set: { holderId } });
-      // console.log(`Created and updated user ${email} with holderId: ${holderId}`);
-    } else {
-      // console.log(`User ${email} already has holderId: ${holderId}`);
+      // Base update object
+      const updateData = { holderId };
+
+      // If referralId exists, calculate refereeTier
+      if (user.referralId) {
+        const referredCount = await collection.countDocuments({
+          referralId: user.referralId,
+          holderId: { $exists: true, $ne: "" }
+        });
+
+        let refereeTier = 1;
+        if (referredCount >= 3 && referredCount <= 9) refereeTier = 2;
+        else if (referredCount >= 10 && referredCount <= 49) refereeTier = 3;
+        else if (referredCount >= 50 && referredCount <= 99) refereeTier = 4;
+        else if (referredCount >= 100) refereeTier = 5;
+
+        updateData.refereeTier = refereeTier;
+      }
+
+      // Update user with holderId (+ refereeTier if applicable)
+      await collection.updateOne({ email: user.email }, { $set: updateData });
     }
 
-    // Call openCard using the holderId (existing or newly created)
+    // Call openCard
     try {
       const openCardResponse = await openCard(holderId, email, aiaCardId);
-      // console.log("Open Card API response:", openCardResponse);
     } catch (openError) {
       console.error("Failed to open card for holderId", holderId, openError);
     }
@@ -2076,6 +2090,7 @@ app.post('/create-cardholder', async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 });
+
 
 // Card Details Endpoint – retrieves card info (with CVV fetched dynamically)
 app.post('/card-details', async (req, res) => {
