@@ -56,17 +56,17 @@ app.use(cors());
 app.use(express.json());
 
 // Connect to MongoDB
-// client.connect()
-//   .then(() => console.log("✅ Connected to MongoDB"))
-//   .catch((err) => console.error("❌ Error connecting to MongoDB:", err));
-
 client.connect()
-  .then(() => {
-    console.log("✅ Connected to MongoDB");
-    // Call seedData on server start
-    seedWasabiData();
-  })
+  .then(() => console.log("✅ Connected to MongoDB"))
   .catch((err) => console.error("❌ Error connecting to MongoDB:", err));
+
+// client.connect()
+//   .then(() => {
+//     console.log("✅ Connected to MongoDB");
+//     // Call seedData on server start
+//     seedWasabiData();
+//   })
+//   .catch((err) => console.error("❌ Error connecting to MongoDB:", err));
 
   async function decryptUsingMicroservice(encryptedData) {
     if (!encryptedData) return null;
@@ -201,13 +201,13 @@ app.post('/api/reset-2fa', async (req, res) => {
 });
 
 // --- Startup Data Seeding Function Using callWasabiApi ---
-async function seedWasabiData() {
-  try {
-    console.log("Starting data seeding from WasabiCard API...");
+// async function seedWasabiData() {
+//   try {
+//     console.log("Starting data seeding from WasabiCard API...");
 
-    // Get the MongoDB collection for storing region, city, and mobile area code data
-    const db = client.db("aiacard-sandbox-cities");
-    const collection = db.collection("aiacard-sandcity-col");
+//     // Get the MongoDB collection for storing region, city, and mobile area code data
+//     const db = client.db("aiacard-sandbox-cities");
+//     const collection = db.collection("aiacard-sandcity-col");
 
     // Fetch region data using callWasabiApi
     // const regionResult = await callWasabiApi('/merchant/core/mcb/common/region', {});
@@ -226,20 +226,20 @@ async function seedWasabiData() {
     // }
 
     // Fetch city data using callWasabiApi
-    const cityResult = await callWasabiApi('/merchant/core/mcb/common/city', {});
-    console.log("Fetched City Data from WasabiCard API:", cityResult);
-    if (cityResult.success && Array.isArray(cityResult.data)) {
-      for (const city of cityResult.data) {
-        // Expecting city to have properties: code, name, country, countryStandardCode
-        await collection.updateOne(
-          { type: "city", code: city.code },
-          { $set: { ...city, type: "city" } },
-          { upsert: true }
-        );
-      }
-    } else {
-      console.warn("City data not returned as expected:", cityResult);
-    }
+    // const cityResult = await callWasabiApi('/merchant/core/mcb/common/city', {});
+    // console.log("Fetched City Data from WasabiCard API:", cityResult);
+    // if (cityResult.success && Array.isArray(cityResult.data)) {
+    //   for (const city of cityResult.data) {
+    //     // Expecting city to have properties: code, name, country, countryStandardCode
+    //     await collection.updateOne(
+    //       { type: "city", code: city.code },
+    //       { $set: { ...city, type: "city" } },
+    //       { upsert: true }
+    //     );
+    //   }
+    // } else {
+    //   console.warn("City data not returned as expected:", cityResult);
+    // }
 
     // Fetch mobile area code data using callWasabiApi
     // const mobileResult = await callWasabiApi('/merchant/core/mcb/common/mobileAreaCode', {});
@@ -257,11 +257,11 @@ async function seedWasabiData() {
     //   console.warn("Mobile area code data not returned as expected:", mobileResult);
     // }
 
-    console.log("Data seeding complete.");
-  } catch (error) {
-    console.error("Error during data seeding:", error);
-  }
-}
+//     console.log("Data seeding complete.");
+//   } catch (error) {
+//     console.error("Error during data seeding:", error);
+//   }
+// }
 
 // Endpoint to fetch referrals for a given referral ID
 app.get('/referrals', async (req, res) => {
