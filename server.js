@@ -226,36 +226,36 @@ async function seedWasabiData() {
     // }
 
     // Fetch city data using callWasabiApi
-    // const cityResult = await callWasabiApi('/merchant/core/mcb/common/city', {});
-    // console.log("Fetched City Data from WasabiCard API:", cityResult);
-    // if (cityResult.success && Array.isArray(cityResult.data)) {
-    //   for (const city of cityResult.data) {
-    //     // Expecting city to have properties: code, name, country, countryStandardCode
-    //     await collection.updateOne(
-    //       { type: "city", code: city.code },
-    //       { $set: { ...city, type: "city" } },
-    //       { upsert: true }
-    //     );
-    //   }
-    // } else {
-    //   console.warn("City data not returned as expected:", cityResult);
-    // }
-
-    // Fetch mobile area code data using callWasabiApi
-    const mobileResult = await callWasabiApi('/merchant/core/mcb/common/mobileAreaCode', {});
-    console.log("Fetched Mobile Area Code Data from WasabiCard API:", mobileResult);
-    if (mobileResult.success && Array.isArray(mobileResult.data)) {
-      for (const mobile of mobileResult.data) {
-        // Expecting mobile to have properties: code, name, areaCode, language, enableGlobalTransfer
+    const cityResult = await callWasabiApi('/merchant/core/mcb/common/city', {});
+    console.log("Fetched City Data from WasabiCard API:", cityResult);
+    if (cityResult.success && Array.isArray(cityResult.data)) {
+      for (const city of cityResult.data) {
+        // Expecting city to have properties: code, name, country, countryStandardCode
         await collection.updateOne(
-          { type: "mobileAreaCode", code: mobile.code },
-          { $set: { ...mobile, type: "mobileAreaCode" } },
+          { type: "city", code: city.code },
+          { $set: { ...city, type: "city" } },
           { upsert: true }
         );
       }
     } else {
-      console.warn("Mobile area code data not returned as expected:", mobileResult);
+      console.warn("City data not returned as expected:", cityResult);
     }
+
+    // Fetch mobile area code data using callWasabiApi
+    // const mobileResult = await callWasabiApi('/merchant/core/mcb/common/mobileAreaCode', {});
+    // console.log("Fetched Mobile Area Code Data from WasabiCard API:", mobileResult);
+    // if (mobileResult.success && Array.isArray(mobileResult.data)) {
+    //   for (const mobile of mobileResult.data) {
+    //     // Expecting mobile to have properties: code, name, areaCode, language, enableGlobalTransfer
+    //     await collection.updateOne(
+    //       { type: "mobileAreaCode", code: mobile.code },
+    //       { $set: { ...mobile, type: "mobileAreaCode" } },
+    //       { upsert: true }
+    //     );
+    //   }
+    // } else {
+    //   console.warn("Mobile area code data not returned as expected:", mobileResult);
+    // }
 
     console.log("Data seeding complete.");
   } catch (error) {
