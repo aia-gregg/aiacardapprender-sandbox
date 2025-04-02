@@ -648,11 +648,11 @@ async function processCardTransaction(payload) {
       }
     );
     if (updateResult.modifiedCount > 0) {
-      console.log(`(Notification) User ${user.email} updated: ${cardFieldName} set to ${cardNo}.`);
+      console.log(`(Notification) User ${user.email} updated: ${cardFieldName} set to ${cardNo}. Active cards: ${newCardIndex}`);
 
       // Create a masked card number (last 4 digits)
       const maskedCardNo = "**** " + cardNo.slice(-4);
-      
+
       // Insert a notification document
       const notificationData = {
         title: "Card Activation",
@@ -661,7 +661,11 @@ async function processCardTransaction(payload) {
         userNotify: user.holderId  // or "All" if applicable
       };
       await insertNotification(notificationData);
-      
+
+      // Fetch the updated user record so that activeCards and new fields are current
+      const updatedUser = await collection.findOne({ _id: user._id });
+      console.log("Calling handleReferralReward with updated user:", { email: updatedUser.email, activeCards: updatedUser.activeCards });
+      await handleReferralReward(updatedUser, cardNo);
     } else {
       console.error('(Notification) Failed to update user record for card transaction.');
     }
@@ -669,6 +673,7 @@ async function processCardTransaction(payload) {
     console.error('Error processing card transaction notification:', error);
   }
 }
+
 
 // Helper function to insert a notification document into the notifications collection
 async function insertNotification(notificationData) {
