@@ -201,91 +201,75 @@ app.post('/api/reset-2fa', async (req, res) => {
   }
 });
 
-// --- External Data Seeding Function ---
-async function seedData() {
+// --- Startup Data Seeding Function ---
+async function seedWasabiData() {
   try {
-    console.log("Starting data seeding from external APIs...");
+    console.log("Starting data seeding from WasabiCard API...");
 
-    // Define your external API endpoints via environment variables
-    const externalRegionApi = process.env.EXTERNAL_REGION_API;
-    const externalCityApi = process.env.EXTERNAL_CITY_API;
-    const externalMobileApi = process.env.EXTERNAL_MOBILE_API;
+    // Use the external WasabiCard endpoints
+    const regionApiUrl = "https://sandbox-api-merchant.wasabicard.com/merchant/core/mcb/common/region";
+    const cityApiUrl = "https://sandbox-api-merchant.wasabicard.com/merchant/core/mcb/common/city";
+    const mobileApiUrl = "https://sandbox-api-merchant.wasabicard.com/merchant/core/mcb/common/mobileAreaCode";
 
-    // Get the MongoDB collection
+    // Get your MongoDB collection
     const db = client.db("aiacard-sandbox-cities");
     const collection = db.collection("aiacard-sandcity-col");
 
-    // --- Fetch and Insert Region Data ---
-    if (externalRegionApi) {
-      const regionRes = await fetch(externalRegionApi, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        // Optionally include a payload if required by the external API:
-        body: JSON.stringify({}) 
-      });
-      const regionData = await regionRes.json();
-      console.log("External Region Data:", regionData);
-
-      if (Array.isArray(regionData)) {
-        for (const region of regionData) {
-          // Assuming each region has properties: code, standardCode, name
-          await collection.updateOne(
-            { type: "region", code: region.code },
-            { $set: { ...region, type: "region" } },
-            { upsert: true }
-          );
-        }
+    // --- Fetch and Upsert Region Data ---
+    const regionRes = await fetch(regionApiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}) // Modify if the external API requires a specific payload
+    });
+    const regionData = await regionRes.json();
+    console.log("Fetched Region Data from WasabiCard API:", regionData);
+    if (Array.isArray(regionData)) {
+      for (const region of regionData) {
+        // Expecting each region record to have: code, standardCode, name
+        await collection.updateOne(
+          { type: "region", code: region.code },
+          { $set: { ...region, type: "region" } },
+          { upsert: true }
+        );
       }
-    } else {
-      console.warn("No external region API endpoint defined.");
     }
 
-    // --- Fetch and Insert City Data ---
-    if (externalCityApi) {
-      const cityRes = await fetch(externalCityApi, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}) 
-      });
-      const cityData = await cityRes.json();
-      console.log("External City Data:", cityData);
-
-      if (Array.isArray(cityData)) {
-        for (const city of cityData) {
-          // Assuming each city has properties: code, name, country, countryStandardCode
-          await collection.updateOne(
-            { type: "city", code: city.code },
-            { $set: { ...city, type: "city" } },
-            { upsert: true }
-          );
-        }
+    // --- Fetch and Upsert City Data ---
+    const cityRes = await fetch(cityApiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+    const cityData = await cityRes.json();
+    console.log("Fetched City Data from WasabiCard API:", cityData);
+    if (Array.isArray(cityData)) {
+      for (const city of cityData) {
+        // Expecting each city record to have: code, name, country, countryStandardCode
+        await collection.updateOne(
+          { type: "city", code: city.code },
+          { $set: { ...city, type: "city" } },
+          { upsert: true }
+        );
       }
-    } else {
-      console.warn("No external city API endpoint defined.");
     }
 
-    // --- Fetch and Insert Mobile Area Code Data ---
-    if (externalMobileApi) {
-      const mobileRes = await fetch(externalMobileApi, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}) 
-      });
-      const mobileData = await mobileRes.json();
-      console.log("External Mobile Area Code Data:", mobileData);
-
-      if (Array.isArray(mobileData)) {
-        for (const mobile of mobileData) {
-          // Assuming each mobile record has properties: code, name, areaCode, language, enableGlobalTransfer
-          await collection.updateOne(
-            { type: "mobileAreaCode", code: mobile.code },
-            { $set: { ...mobile, type: "mobileAreaCode" } },
-            { upsert: true }
-          );
-        }
+    // --- Fetch and Upsert Mobile Area Code Data ---
+    const mobileRes = await fetch(mobileApiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+    const mobileData = await mobileRes.json();
+    console.log("Fetched Mobile Area Code Data from WasabiCard API:", mobileData);
+    if (Array.isArray(mobileData)) {
+      for (const mobile of mobileData) {
+        // Expecting each mobile record to have: code, name, areaCode, language, enableGlobalTransfer
+        await collection.updateOne(
+          { type: "mobileAreaCode", code: mobile.code },
+          { $set: { ...mobile, type: "mobileAreaCode" } },
+          { upsert: true }
+        );
       }
-    } else {
-      console.warn("No external mobile area code API endpoint defined.");
     }
 
     console.log("Data seeding complete.");
