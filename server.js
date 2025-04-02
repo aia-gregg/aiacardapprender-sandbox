@@ -193,44 +193,6 @@ app.post('/api/reset-2fa', async (req, res) => {
   }
 });
 
-// Static Region List Endpoint (Country Codes)
-app.post('/merchant/core/mcb/common/region', (req, res) => {
-  const regions = [
-    { code: 'AF', standardCode: 'AFG', name: 'Afghanistan' },
-    { code: 'AL', standardCode: 'ALB', name: 'Albania' },
-    { code: 'DZ', standardCode: 'DZA', name: 'Algeria' },
-    { code: 'US', standardCode: 'USA', name: 'United States' },
-    { code: 'CA', standardCode: 'CAN', name: 'Canada' },
-    { code: 'GB', standardCode: 'GBR', name: 'United Kingdom' },
-    // ... add the rest of the countries as needed
-  ];
-  console.log("Static Region List Response:", regions);
-  res.json({ success: true, code: 200, msg: "Success", data: regions });
-});
-
-// Static City List Endpoint
-app.post('/merchant/core/mcb/common/city', (req, res) => {
-  const cities = [
-    { code: 'NYC', name: 'New York City', country: 'US', countryStandardCode: 'USA' },
-    { code: 'LON', name: 'London', country: 'GB', countryStandardCode: 'GBR' },
-    { code: 'TOR', name: 'Toronto', country: 'CA', countryStandardCode: 'CAN' },
-    // ... add additional cities as needed
-  ];
-  console.log("Static City List Response:", cities);
-  res.json({ success: true, code: 200, msg: "Success", data: cities });
-});
-
-// Static Mobile Code List Endpoint
-app.post('/merchant/core/mcb/common/mobileAreaCode', (req, res) => {
-  const mobileCodes = [
-    { code: '+1', name: 'United States', areaCode: 'US', language: 'en', enableGlobalTransfer: true },
-    { code: '+44', name: 'United Kingdom', areaCode: 'GB', language: 'en', enableGlobalTransfer: true },
-    // ... add additional mobile codes as needed
-  ];
-  console.log("Static Mobile Code List Response:", mobileCodes);
-  res.json({ success: true, code: 200, msg: "Success", data: mobileCodes });
-});
-
 // Endpoint to fetch referrals for a given referral ID
 app.get('/referrals', async (req, res) => {
   const { referralId } = req.query;
@@ -2338,6 +2300,7 @@ app.post('/create-vault-account', async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 });
+
 
 const server = app.listen(port, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${port}`);
