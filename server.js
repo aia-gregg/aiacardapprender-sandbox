@@ -193,46 +193,42 @@ app.post('/api/reset-2fa', async (req, res) => {
   }
 });
 
-// Dynamic Region List Endpoint
-app.post('/merchant/core/mcb/common/region', async (req, res) => {
-  try {
-    const database = client.db("aiacard-sandbox-db"); // Use your database name
-    // Query the regions collection for current data
-    const regions = await database.collection("regions").find({}).toArray();
-    console.log("Dynamic Region List Response:", regions);
-    res.json({ success: true, code: 200, msg: "Success", data: regions });
-  } catch (error) {
-    console.error("Error fetching dynamic region list:", error);
-    res.status(500).json({ success: false, message: error.message });
-  }
+// Static Region List Endpoint (Country Codes)
+app.post('/merchant/core/mcb/common/region', (req, res) => {
+  const regions = [
+    { code: 'AF', standardCode: 'AFG', name: 'Afghanistan' },
+    { code: 'AL', standardCode: 'ALB', name: 'Albania' },
+    { code: 'DZ', standardCode: 'DZA', name: 'Algeria' },
+    { code: 'US', standardCode: 'USA', name: 'United States' },
+    { code: 'CA', standardCode: 'CAN', name: 'Canada' },
+    { code: 'GB', standardCode: 'GBR', name: 'United Kingdom' },
+    // ... add the rest of the countries as needed
+  ];
+  console.log("Static Region List Response:", regions);
+  res.json({ success: true, code: 200, msg: "Success", data: regions });
 });
 
-// Dynamic City List Endpoint
-app.post('/merchant/core/mcb/common/city', async (req, res) => {
-  try {
-    const database = client.db("aiacard-sandbox-db"); // Use your database name
-    // Query the cities collection for current data
-    const cities = await database.collection("cities").find({}).toArray();
-    console.log("Dynamic City List Response:", cities);
-    res.json({ success: true, code: 200, msg: "Success", data: cities });
-  } catch (error) {
-    console.error("Error fetching dynamic city list:", error);
-    res.status(500).json({ success: false, message: error.message });
-  }
+// Static City List Endpoint
+app.post('/merchant/core/mcb/common/city', (req, res) => {
+  const cities = [
+    { code: 'NYC', name: 'New York City', country: 'US', countryStandardCode: 'USA' },
+    { code: 'LON', name: 'London', country: 'GB', countryStandardCode: 'GBR' },
+    { code: 'TOR', name: 'Toronto', country: 'CA', countryStandardCode: 'CAN' },
+    // ... add additional cities as needed
+  ];
+  console.log("Static City List Response:", cities);
+  res.json({ success: true, code: 200, msg: "Success", data: cities });
 });
 
-// Dynamic Mobile Code List Endpoint
-app.post('/merchant/core/mcb/common/mobileAreaCode', async (req, res) => {
-  try {
-    const database = client.db("aiacard-sandbox-db"); // Use your database name
-    // Query the mobileCodes collection for current data
-    const mobileCodes = await database.collection("mobileCodes").find({}).toArray();
-    console.log("Dynamic Mobile Code List Response:", mobileCodes);
-    res.json({ success: true, code: 200, msg: "Success", data: mobileCodes });
-  } catch (error) {
-    console.error("Error fetching dynamic mobile area code list:", error);
-    res.status(500).json({ success: false, message: error.message });
-  }
+// Static Mobile Code List Endpoint
+app.post('/merchant/core/mcb/common/mobileAreaCode', (req, res) => {
+  const mobileCodes = [
+    { code: '+1', name: 'United States', areaCode: 'US', language: 'en', enableGlobalTransfer: true },
+    { code: '+44', name: 'United Kingdom', areaCode: 'GB', language: 'en', enableGlobalTransfer: true },
+    // ... add additional mobile codes as needed
+  ];
+  console.log("Static Mobile Code List Response:", mobileCodes);
+  res.json({ success: true, code: 200, msg: "Success", data: mobileCodes });
 });
 
 // Endpoint to fetch referrals for a given referral ID
