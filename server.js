@@ -56,8 +56,16 @@ app.use(cors());
 app.use(express.json());
 
 // Connect to MongoDB
+// client.connect()
+//   .then(() => console.log("✅ Connected to MongoDB"))
+//   .catch((err) => console.error("❌ Error connecting to MongoDB:", err));
+
 client.connect()
-  .then(() => console.log("✅ Connected to MongoDB"))
+  .then(() => {
+    console.log("✅ Connected to MongoDB");
+    // Call seedData on server start
+    seedData();
+  })
   .catch((err) => console.error("❌ Error connecting to MongoDB:", err));
 
   async function decryptUsingMicroservice(encryptedData) {
@@ -193,60 +201,98 @@ app.post('/api/reset-2fa', async (req, res) => {
   }
 });
 
-// ------------------------------
-// GET Endpoints for Listing Region, City & Mobile Area Code Data
-// ------------------------------
-
-// GET endpoint to retrieve all Regions (Countries)
-app.get('/merchant/core/mcb/common/region', async (req, res) => {
+// --- External Data Seeding Function ---
+async function seedData() {
   try {
-    const database = client.db("aiacard-sandbox-cities");
-    const collection = database.collection("aiacard-sandcity-col");
+    console.log("Starting data seeding from external APIs...");
 
-    // Find all documents with type "region"
-    const regions = await collection.find({ type: "region" }).toArray();
-    console.log("Fetched Regions from MongoDB:", regions);
+    // Define your external API endpoints via environment variables
+    const externalRegionApi = process.env.EXTERNAL_REGION_API;
+    const externalCityApi = process.env.EXTERNAL_CITY_API;
+    const externalMobileApi = process.env.EXTERNAL_MOBILE_API;
 
-    return res.status(200).json({ success: true, data: regions });
+    // Get the MongoDB collection
+    const db = client.db("aiacard-sandbox-cities");
+    const collection = db.collection("aiacard-sandcity-col");
+
+    // --- Fetch and Insert Region Data ---
+    if (externalRegionApi) {
+      const regionRes = await fetch(externalRegionApi, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // Optionally include a payload if required by the external API:
+        body: JSON.stringify({}) 
+      });
+      const regionData = await regionRes.json();
+      console.log("External Region Data:", regionData);
+
+      if (Array.isArray(regionData)) {
+        for (const region of regionData) {
+          // Assuming each region has properties: code, standardCode, name
+          await collection.updateOne(
+            { type: "region", code: region.code },
+            { $set: { ...region, type: "region" } },
+            { upsert: true }
+          );
+        }
+      }
+    } else {
+      console.warn("No external region API endpoint defined.");
+    }
+
+    // --- Fetch and Insert City Data ---
+    if (externalCityApi) {
+      const cityRes = await fetch(externalCityApi, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}) 
+      });
+      const cityData = await cityRes.json();
+      console.log("External City Data:", cityData);
+
+      if (Array.isArray(cityData)) {
+        for (const city of cityData) {
+          // Assuming each city has properties: code, name, country, countryStandardCode
+          await collection.updateOne(
+            { type: "city", code: city.code },
+            { $set: { ...city, type: "city" } },
+            { upsert: true }
+          );
+        }
+      }
+    } else {
+      console.warn("No external city API endpoint defined.");
+    }
+
+    // --- Fetch and Insert Mobile Area Code Data ---
+    if (externalMobileApi) {
+      const mobileRes = await fetch(externalMobileApi, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}) 
+      });
+      const mobileData = await mobileRes.json();
+      console.log("External Mobile Area Code Data:", mobileData);
+
+      if (Array.isArray(mobileData)) {
+        for (const mobile of mobileData) {
+          // Assuming each mobile record has properties: code, name, areaCode, language, enableGlobalTransfer
+          await collection.updateOne(
+            { type: "mobileAreaCode", code: mobile.code },
+            { $set: { ...mobile, type: "mobileAreaCode" } },
+            { upsert: true }
+          );
+        }
+      }
+    } else {
+      console.warn("No external mobile area code API endpoint defined.");
+    }
+
+    console.log("Data seeding complete.");
   } catch (error) {
-    console.error("Error fetching regions:", error);
-    return res.status(500).json({ success: false, message: error.message });
+    console.error("Error during data seeding:", error);
   }
-});
-
-// GET endpoint to retrieve all Cities
-app.get('/merchant/core/mcb/common/city', async (req, res) => {
-  try {
-    const database = client.db("aiacard-sandbox-cities");
-    const collection = database.collection("aiacard-sandcity-col");
-
-    // Find all documents with type "city"
-    const cities = await collection.find({ type: "city" }).toArray();
-    console.log("Fetched Cities from MongoDB:", cities);
-
-    return res.status(200).json({ success: true, data: cities });
-  } catch (error) {
-    console.error("Error fetching cities:", error);
-    return res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// GET endpoint to retrieve all Mobile Area Codes
-app.get('/merchant/core/mcb/common/mobileAreaCode', async (req, res) => {
-  try {
-    const database = client.db("aiacard-sandbox-cities");
-    const collection = database.collection("aiacard-sandcity-col");
-
-    // Find all documents with type "mobileAreaCode"
-    const mobileAreaCodes = await collection.find({ type: "mobileAreaCode" }).toArray();
-    console.log("Fetched Mobile Area Codes from MongoDB:", mobileAreaCodes);
-
-    return res.status(200).json({ success: true, data: mobileAreaCodes });
-  } catch (error) {
-    console.error("Error fetching mobile area codes:", error);
-    return res.status(500).json({ success: false, message: error.message });
-  }
-});
+}
 
 // Endpoint to fetch referrals for a given referral ID
 app.get('/referrals', async (req, res) => {
