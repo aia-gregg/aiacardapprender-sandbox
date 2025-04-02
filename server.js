@@ -210,14 +210,17 @@ app.post('/merchant/core/mcb/common/region', async (req, res) => {
     const database = client.db("aiacard-sandbox-cities");
     const collection = database.collection("aiacard-sandcity-col");
 
-    // Use an upsert to either update or insert a new region record.
+    // Upsert the region record.
     const result = await collection.updateOne(
       { type: "region", code: code },
       { $set: { code, standardCode, name, type: "region" } },
       { upsert: true }
     );
-
     console.log("Region upsert result:", result);
+
+    // Query and log the full list of regions.
+    const allRegions = await collection.find({ type: "region" }).toArray();
+    console.log("Full list of Regions:", allRegions);
 
     const responsePayload = {
       success: true,
@@ -246,14 +249,17 @@ app.post('/merchant/core/mcb/common/city', async (req, res) => {
     const database = client.db("aiacard-sandbox-cities");
     const collection = database.collection("aiacard-sandcity-col");
 
-    // Upsert the city document with a type field.
+    // Upsert the city record.
     const result = await collection.updateOne(
       { type: "city", code: code },
       { $set: { code, name, country, countryStandardCode, type: "city" } },
       { upsert: true }
     );
-
     console.log("City upsert result:", result);
+
+    // Query and log the full list of cities.
+    const allCities = await collection.find({ type: "city" }).toArray();
+    console.log("Full list of Cities:", allCities);
 
     const responsePayload = {
       success: true,
@@ -282,14 +288,17 @@ app.post('/merchant/core/mcb/common/mobileAreaCode', async (req, res) => {
     const database = client.db("aiacard-sandbox-cities");
     const collection = database.collection("aiacard-sandcity-col");
 
-    // Upsert the mobile area code document with a type field.
+    // Upsert the mobile area code record.
     const result = await collection.updateOne(
       { type: "mobileAreaCode", code: code },
       { $set: { code, name, areaCode, language, enableGlobalTransfer, type: "mobileAreaCode" } },
       { upsert: true }
     );
-
     console.log("Mobile Area Code upsert result:", result);
+
+    // Query and log the full list of mobile area codes.
+    const allMobile = await collection.find({ type: "mobileAreaCode" }).toArray();
+    console.log("Full list of Mobile Area Codes:", allMobile);
 
     const responsePayload = {
       success: true,
