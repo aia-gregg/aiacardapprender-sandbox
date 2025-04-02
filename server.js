@@ -438,55 +438,45 @@ app.post('/openCard', async (req, res) => {
 });
 
 async function handleReferralReward(user, cardNo) {
-  if (!user || !user.referralId) return;
+  console.log("📢 [ReferralReward] Called with:", { email: user.email, cardNo });
+
+  if (!user || !user.referralId) {
+    console.log("❌ [ReferralReward] User missing or no referralId. Skipping.");
+    return;
+  }
 
   const referralDb = client.db("aiacard-sandbox-refer");
   const referralCol = referralDb.collection("aiacard-sandrefer-col");
 
-  // 1. Get the highest card index for cardNo{X}aiaId
   const activeCards = user.activeCards || 0;
   const lastCardAiaIdField = `cardNo${activeCards}aiaId`;
   const cardNoaiaId = user[lastCardAiaIdField];
 
-  // 2. Determine base value from card type
+  console.log("🔎 [ReferralReward] Checking lastCardAiaIdField:", lastCardAiaIdField, "=", cardNoaiaId);
+
+  // Determine base value
   let cardBaseValue = 0;
   switch (cardNoaiaId) {
-    case 'lite':
-      cardBaseValue = 4.9;
-      break;
-    case 'pro':
-      cardBaseValue = 9.9;
-      break;
-    case 'elite':
-      cardBaseValue = 14.9;
-      break;
+    case 'lite': cardBaseValue = 4.9; break;
+    case 'pro': cardBaseValue = 9.9; break;
+    case 'elite': cardBaseValue = 14.9; break;
     default:
-      console.warn(`Unknown card type: ${cardNoaiaId}`);
+      console.warn(`❗ [ReferralReward] Unknown card type: ${cardNoaiaId}`);
       return;
   }
 
-  // 3. Determine multiplier from refereeTier
+  // Multiplier by tier
   const refereeTier = user.refereeTier || 1;
   let refereeMultiplier = 1;
   switch (refereeTier) {
-    case 2:
-      refereeMultiplier = 1.5;
-      break;
-    case 3:
-      refereeMultiplier = 2;
-      break;
-    case 4:
-      refereeMultiplier = 2.5;
-      break;
-    case 5:
-      refereeMultiplier = 3;
-      break;
+    case 2: refereeMultiplier = 1.5; break;
+    case 3: refereeMultiplier = 2; break;
+    case 4: refereeMultiplier = 2.5; break;
+    case 5: refereeMultiplier = 3; break;
   }
 
-  // 4. Calculate commission
   const commission = Decimal128.fromString((cardBaseValue * refereeMultiplier).toFixed(2));
 
-  // 5. Prepare record
   const record = {
     createTime: new Date(),
     cardNo,
@@ -498,14 +488,14 @@ async function handleReferralReward(user, cardNo) {
     cardNoaiaId
   };
 
-  // 6. Insert into referral DB
   try {
-    await referralCol.insertOne(record);
-    console.log("🎯 Referral reward record inserted:", record);
+    const result = await referralCol.insertOne(record);
+    console.log("✅ [ReferralReward] Inserted record with _id:", result.insertedId);
   } catch (err) {
-    console.error("❌ Failed to insert referral reward record:", err);
+    console.error("❌ [ReferralReward] Failed to insert referral reward record:", err);
   }
 }
+
 
 // Webhook API
 // Webhook API
