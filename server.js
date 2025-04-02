@@ -198,7 +198,7 @@ app.post('/api/reset-2fa', async (req, res) => {
 // ------------------------------
 
 // GET endpoint to retrieve all Regions (Countries)
-app.get('/merchant/core/mcb/common/region/list', async (req, res) => {
+app.get('/merchant/core/mcb/common/region', async (req, res) => {
   try {
     const database = client.db("aiacard-sandbox-cities");
     const collection = database.collection("aiacard-sandcity-col");
@@ -215,7 +215,7 @@ app.get('/merchant/core/mcb/common/region/list', async (req, res) => {
 });
 
 // GET endpoint to retrieve all Cities
-app.get('/merchant/core/mcb/common/city/list', async (req, res) => {
+app.get('/merchant/core/mcb/common/city', async (req, res) => {
   try {
     const database = client.db("aiacard-sandbox-cities");
     const collection = database.collection("aiacard-sandcity-col");
@@ -232,7 +232,7 @@ app.get('/merchant/core/mcb/common/city/list', async (req, res) => {
 });
 
 // GET endpoint to retrieve all Mobile Area Codes
-app.get('/merchant/core/mcb/common/mobileAreaCode/list', async (req, res) => {
+app.get('/merchant/core/mcb/common/mobileAreaCode', async (req, res) => {
   try {
     const database = client.db("aiacard-sandbox-cities");
     const collection = database.collection("aiacard-sandcity-col");
