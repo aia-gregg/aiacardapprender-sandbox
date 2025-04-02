@@ -202,7 +202,7 @@ app.post('/merchant/core/mcb/common/region', async (req, res) => {
   try {
     const { code, standardCode, name } = req.body;
     if (!code || !standardCode || !name) {
-      const errorResponse = { success: false, message: "Missing required fields: code, standardCode, and name are required." };
+      const errorResponse = { success: false, message: "Missing required fields: code, standardCode, and name." };
       console.log("Response from /merchant/core/mcb/common/region:", errorResponse);
       return res.status(400).json(errorResponse);
     }
@@ -212,15 +212,15 @@ app.post('/merchant/core/mcb/common/region', async (req, res) => {
 
     // Upsert the region record.
     const result = await collection.updateOne(
-      { type: "region", code: code },
+      { type: "region", code },
       { $set: { code, standardCode, name, type: "region" } },
       { upsert: true }
     );
     console.log("Region upsert result:", result);
 
-    // Query and log the full list of regions.
-    const allRegions = await collection.find({ type: "region" }).toArray();
-    console.log("Full list of Regions:", allRegions);
+    // Fetch and log the full list of regions.
+    const regions = await collection.find({ type: "region" }).toArray();
+    console.log("Full list of Regions:", regions);
 
     const responsePayload = {
       success: true,
@@ -241,7 +241,7 @@ app.post('/merchant/core/mcb/common/city', async (req, res) => {
   try {
     const { code, name, country, countryStandardCode } = req.body;
     if (!code || !name || !country || !countryStandardCode) {
-      const errorResponse = { success: false, message: "Missing required fields: code, name, country, and countryStandardCode are required." };
+      const errorResponse = { success: false, message: "Missing required fields: code, name, country, and countryStandardCode." };
       console.log("Response from /merchant/core/mcb/common/city:", errorResponse);
       return res.status(400).json(errorResponse);
     }
@@ -251,15 +251,15 @@ app.post('/merchant/core/mcb/common/city', async (req, res) => {
 
     // Upsert the city record.
     const result = await collection.updateOne(
-      { type: "city", code: code },
+      { type: "city", code },
       { $set: { code, name, country, countryStandardCode, type: "city" } },
       { upsert: true }
     );
     console.log("City upsert result:", result);
 
-    // Query and log the full list of cities.
-    const allCities = await collection.find({ type: "city" }).toArray();
-    console.log("Full list of Cities:", allCities);
+    // Fetch and log the full list of cities.
+    const cities = await collection.find({ type: "city" }).toArray();
+    console.log("Full list of Cities:", cities);
 
     const responsePayload = {
       success: true,
@@ -279,8 +279,8 @@ app.post('/merchant/core/mcb/common/city', async (req, res) => {
 app.post('/merchant/core/mcb/common/mobileAreaCode', async (req, res) => {
   try {
     const { code, name, areaCode, language, enableGlobalTransfer } = req.body;
-    if (!code || !name || !areaCode || !language || enableGlobalTransfer === undefined) {
-      const errorResponse = { success: false, message: "Missing required fields: code, name, areaCode, language, and enableGlobalTransfer are required." };
+    if (!code || !name || !areaCode || !language || typeof enableGlobalTransfer !== "boolean") {
+      const errorResponse = { success: false, message: "Missing required fields: code, name, areaCode, language, and enableGlobalTransfer (boolean) are required." };
       console.log("Response from /merchant/core/mcb/common/mobileAreaCode:", errorResponse);
       return res.status(400).json(errorResponse);
     }
@@ -290,15 +290,15 @@ app.post('/merchant/core/mcb/common/mobileAreaCode', async (req, res) => {
 
     // Upsert the mobile area code record.
     const result = await collection.updateOne(
-      { type: "mobileAreaCode", code: code },
+      { type: "mobileAreaCode", code },
       { $set: { code, name, areaCode, language, enableGlobalTransfer, type: "mobileAreaCode" } },
       { upsert: true }
     );
     console.log("Mobile Area Code upsert result:", result);
 
-    // Query and log the full list of mobile area codes.
-    const allMobile = await collection.find({ type: "mobileAreaCode" }).toArray();
-    console.log("Full list of Mobile Area Codes:", allMobile);
+    // Fetch and log the full list of mobile area codes.
+    const mobiles = await collection.find({ type: "mobileAreaCode" }).toArray();
+    console.log("Full list of Mobile Area Codes:", mobiles);
 
     const responsePayload = {
       success: true,
