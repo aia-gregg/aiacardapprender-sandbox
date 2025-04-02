@@ -2309,29 +2309,13 @@ app.post('/create-vault-account', async (req, res) => {
 //   console.error('Server error:', err);
 // });
 
-// Start the server
 const server = app.listen(port, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${port}`);
 
-  // Immediately call the endpoints to log their responses.
-  (async function logEndpointsResponse() {
-    const endpoints = [
-      '/merchant/core/mcb/common/region',
-      '/merchant/core/mcb/common/city',
-      '/merchant/core/mcb/common/mobileAreaCode'
-    ];
-    
-    for (const endpoint of endpoints) {
-      try {
-        // Make a POST request to each endpoint.
-        const res = await fetch(`http://localhost:${port}${endpoint}`, { method: 'POST' });
-        const payload = await res.json();
-        console.log(`Response from ${endpoint}:`, payload);
-      } catch (error) {
-        console.error(`Error fetching ${endpoint}:`, error);
-      }
-    }
-  })();
+  // Log the raw payloads for local storage use.
+  console.log("Raw payload for /merchant/core/mcb/common/region:", getRegionList());
+  console.log("Raw payload for /merchant/core/mcb/common/city:", getCityList());
+  console.log("Raw payload for /merchant/core/mcb/common/mobileAreaCode:", getMobileAreaCodeList());
 });
 
 server.on('error', (err) => {
