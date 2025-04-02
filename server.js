@@ -193,6 +193,118 @@ app.post('/api/reset-2fa', async (req, res) => {
   }
 });
 
+// ------------------------------
+// API Endpoints for Region, City & Mobile Area Code
+// ------------------------------
+
+// Endpoint to create/update a Region (Country)
+app.post('/merchant/core/mcb/common/region', async (req, res) => {
+  try {
+    const { code, standardCode, name } = req.body;
+    if (!code || !standardCode || !name) {
+      const errorResponse = { success: false, message: "Missing required fields: code, standardCode, and name are required." };
+      console.log("Response from /merchant/core/mcb/common/region:", errorResponse);
+      return res.status(400).json(errorResponse);
+    }
+
+    const database = client.db("aiacard-sandbox-cities");
+    const collection = database.collection("aiacard-sandcity-col");
+
+    // Use an upsert to either update or insert a new region record.
+    const result = await collection.updateOne(
+      { type: "region", code: code },
+      { $set: { code, standardCode, name, type: "region" } },
+      { upsert: true }
+    );
+
+    console.log("Region upsert result:", result);
+
+    const responsePayload = {
+      success: true,
+      message: "Region saved successfully.",
+      data: { code, standardCode, name }
+    };
+
+    console.log("Response from /merchant/core/mcb/common/region:", responsePayload);
+    return res.status(200).json(responsePayload);
+  } catch (error) {
+    console.error("Error in /merchant/core/mcb/common/region:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Endpoint to create/update a City
+app.post('/merchant/core/mcb/common/city', async (req, res) => {
+  try {
+    const { code, name, country, countryStandardCode } = req.body;
+    if (!code || !name || !country || !countryStandardCode) {
+      const errorResponse = { success: false, message: "Missing required fields: code, name, country, and countryStandardCode are required." };
+      console.log("Response from /merchant/core/mcb/common/city:", errorResponse);
+      return res.status(400).json(errorResponse);
+    }
+
+    const database = client.db("aiacard-sandbox-cities");
+    const collection = database.collection("aiacard-sandcity-col");
+
+    // Upsert the city document with a type field.
+    const result = await collection.updateOne(
+      { type: "city", code: code },
+      { $set: { code, name, country, countryStandardCode, type: "city" } },
+      { upsert: true }
+    );
+
+    console.log("City upsert result:", result);
+
+    const responsePayload = {
+      success: true,
+      message: "City saved successfully.",
+      data: { code, name, country, countryStandardCode }
+    };
+
+    console.log("Response from /merchant/core/mcb/common/city:", responsePayload);
+    return res.status(200).json(responsePayload);
+  } catch (error) {
+    console.error("Error in /merchant/core/mcb/common/city:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Endpoint to create/update a Mobile Area Code
+app.post('/merchant/core/mcb/common/mobileAreaCode', async (req, res) => {
+  try {
+    const { code, name, areaCode, language, enableGlobalTransfer } = req.body;
+    if (!code || !name || !areaCode || !language || enableGlobalTransfer === undefined) {
+      const errorResponse = { success: false, message: "Missing required fields: code, name, areaCode, language, and enableGlobalTransfer are required." };
+      console.log("Response from /merchant/core/mcb/common/mobileAreaCode:", errorResponse);
+      return res.status(400).json(errorResponse);
+    }
+
+    const database = client.db("aiacard-sandbox-cities");
+    const collection = database.collection("aiacard-sandcity-col");
+
+    // Upsert the mobile area code document with a type field.
+    const result = await collection.updateOne(
+      { type: "mobileAreaCode", code: code },
+      { $set: { code, name, areaCode, language, enableGlobalTransfer, type: "mobileAreaCode" } },
+      { upsert: true }
+    );
+
+    console.log("Mobile Area Code upsert result:", result);
+
+    const responsePayload = {
+      success: true,
+      message: "Mobile area code saved successfully.",
+      data: { code, name, areaCode, language, enableGlobalTransfer }
+    };
+
+    console.log("Response from /merchant/core/mcb/common/mobileAreaCode:", responsePayload);
+    return res.status(200).json(responsePayload);
+  } catch (error) {
+    console.error("Error in /merchant/core/mcb/common/mobileAreaCode:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 // Endpoint to fetch referrals for a given referral ID
 app.get('/referrals', async (req, res) => {
   const { referralId } = req.query;
