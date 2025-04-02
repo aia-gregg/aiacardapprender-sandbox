@@ -85,7 +85,6 @@ client.connect()
     }
   }
   
-
 // Connect to MongoDB (ensure process.env.MONGODB_URI is set in your environment)
 // mongoose.connect(process.env.MONGODB_URI)
 
@@ -337,8 +336,36 @@ app.get('/referrals', async (req, res) => {
   }
 });
 
-
-
+// New endpoint to fetch referral reward records from the referrals DB
+app.get('/referral-rewards', async (req, res) => {
+  const { referralId } = req.query;
+  if (!referralId) {
+    return res.status(400).json({ success: false, message: "Missing referralId parameter" });
+  }
+  try {
+    const referralDb = client.db("aiacard-sandbox-refer");
+    const collection = referralDb.collection("aiacard-sandrefer-col");
+    
+    // Query for records with the matching referralId
+    const rewards = await collection.find({ referralId }).toArray();
+    
+    // Sort rewards by createTime descending (most recent first)
+    rewards.sort((a, b) => new Date(b.createTime) - new Date(a.createTime));
+    
+    // Optionally, map to only return the desired fields:
+    const mappedRewards = rewards.map(record => ({
+      fullName: record.fullName,
+      createTime: record.createTime,
+      commission: parseFloat(record.commission.toString()),
+      rewardStatus: record.rewardStatus
+    }));
+    
+    res.status(200).json({ success: true, data: mappedRewards });
+  } catch (error) {
+    console.error("Error fetching referral rewards:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
 
 // Endpoint to update the user's biometrics preference
 app.post('/api/update-biometrics', async (req, res) => {
@@ -496,8 +523,6 @@ async function handleReferralReward(user, cardNo) {
   }
 }
 
-
-// Webhook API
 // Webhook API
 app.post( '/webhook', express.json({
     verify: (req, res, buf) => {
@@ -674,7 +699,6 @@ async function processCardTransaction(payload) {
   }
 }
 
-
 // Helper function to insert a notification document into the notifications collection
 async function insertNotification(notificationData) {
   try {
@@ -773,8 +797,7 @@ app.get('/notifications', async (req, res) => {
   }
 });
 
-
-// // A helper function to decrypt a base64-encoded field from Wasabi using your RSA private key.
+// A helper function to decrypt a base64-encoded field from Wasabi using your RSA private key.
 function decryptRSA(encryptedBase64, privateKey) {
   if (!encryptedBase64) return null;
   try {
@@ -907,7 +930,6 @@ app.post('/get-active-cards', async (req, res) => {
     return res.status(500).json({ success: false, message: "Server error" });
   }
 });
-
 
 // New Topup/Deposit Endpoint
 app.post('/top-up', async (req, res) => {
@@ -1042,7 +1064,6 @@ app.post('/merchant/core/mcb/card/unfreeze', async (req, res) => {
     res.status(500).json({ success: false, code: 500, msg: "Internal Server Error" });
   }
 });
-
 
 // Nodemailer Configuration
 const transporter = nodemailer.createTransport({
@@ -2185,7 +2206,6 @@ app.post('/create-zendesk-ticket', async (req, res) => {
   }
 });
 
-
 // Ping Endpoint
 app.get('/', (req, res) => {
   res.status(200).send('Server is up and running');
@@ -2301,7 +2321,6 @@ app.post('/create-cardholder', async (req, res) => {
   }
 });
 
-
 // Card Details Endpoint – retrieves card info (with CVV fetched dynamically)
 app.post('/card-details', async (req, res) => {
   try {
@@ -2354,7 +2373,6 @@ app.post('/card-details', async (req, res) => {
   }
 });
 
-
 app.post('/create-vault-account', async (req, res) => {
   try {
     const payload = req.body;
@@ -2366,7 +2384,6 @@ app.post('/create-vault-account', async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 });
-
 
 const server = app.listen(port, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${port}`);
