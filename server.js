@@ -194,122 +194,56 @@ app.post('/api/reset-2fa', async (req, res) => {
 });
 
 // ------------------------------
-// API Endpoints for Region, City & Mobile Area Code
+// GET Endpoints for Listing Region, City & Mobile Area Code Data
 // ------------------------------
 
-// Endpoint to create/update a Region (Country)
-app.post('/merchant/core/mcb/common/region', async (req, res) => {
+// GET endpoint to retrieve all Regions (Countries)
+app.get('/merchant/core/mcb/common/region/list', async (req, res) => {
   try {
-    const { code, standardCode, name } = req.body;
-    if (!code || !standardCode || !name) {
-      const errorResponse = { success: false, message: "Missing required fields: code, standardCode, and name." };
-      console.log("Response from /merchant/core/mcb/common/region:", errorResponse);
-      return res.status(400).json(errorResponse);
-    }
-
     const database = client.db("aiacard-sandbox-cities");
     const collection = database.collection("aiacard-sandcity-col");
 
-    // Upsert the region record.
-    const result = await collection.updateOne(
-      { type: "region", code },
-      { $set: { code, standardCode, name, type: "region" } },
-      { upsert: true }
-    );
-    console.log("Region upsert result:", result);
-
-    // Fetch and log the full list of regions.
+    // Find all documents with type "region"
     const regions = await collection.find({ type: "region" }).toArray();
-    console.log("Full list of Regions:", regions);
+    console.log("Fetched Regions from MongoDB:", regions);
 
-    const responsePayload = {
-      success: true,
-      message: "Region saved successfully.",
-      data: { code, standardCode, name }
-    };
-
-    console.log("Response from /merchant/core/mcb/common/region:", responsePayload);
-    return res.status(200).json(responsePayload);
+    return res.status(200).json({ success: true, data: regions });
   } catch (error) {
-    console.error("Error in /merchant/core/mcb/common/region:", error);
+    console.error("Error fetching regions:", error);
     return res.status(500).json({ success: false, message: error.message });
   }
 });
 
-// Endpoint to create/update a City
-app.post('/merchant/core/mcb/common/city', async (req, res) => {
+// GET endpoint to retrieve all Cities
+app.get('/merchant/core/mcb/common/city/list', async (req, res) => {
   try {
-    const { code, name, country, countryStandardCode } = req.body;
-    if (!code || !name || !country || !countryStandardCode) {
-      const errorResponse = { success: false, message: "Missing required fields: code, name, country, and countryStandardCode." };
-      console.log("Response from /merchant/core/mcb/common/city:", errorResponse);
-      return res.status(400).json(errorResponse);
-    }
-
     const database = client.db("aiacard-sandbox-cities");
     const collection = database.collection("aiacard-sandcity-col");
 
-    // Upsert the city record.
-    const result = await collection.updateOne(
-      { type: "city", code },
-      { $set: { code, name, country, countryStandardCode, type: "city" } },
-      { upsert: true }
-    );
-    console.log("City upsert result:", result);
-
-    // Fetch and log the full list of cities.
+    // Find all documents with type "city"
     const cities = await collection.find({ type: "city" }).toArray();
-    console.log("Full list of Cities:", cities);
+    console.log("Fetched Cities from MongoDB:", cities);
 
-    const responsePayload = {
-      success: true,
-      message: "City saved successfully.",
-      data: { code, name, country, countryStandardCode }
-    };
-
-    console.log("Response from /merchant/core/mcb/common/city:", responsePayload);
-    return res.status(200).json(responsePayload);
+    return res.status(200).json({ success: true, data: cities });
   } catch (error) {
-    console.error("Error in /merchant/core/mcb/common/city:", error);
+    console.error("Error fetching cities:", error);
     return res.status(500).json({ success: false, message: error.message });
   }
 });
 
-// Endpoint to create/update a Mobile Area Code
-app.post('/merchant/core/mcb/common/mobileAreaCode', async (req, res) => {
+// GET endpoint to retrieve all Mobile Area Codes
+app.get('/merchant/core/mcb/common/mobileAreaCode/list', async (req, res) => {
   try {
-    const { code, name, areaCode, language, enableGlobalTransfer } = req.body;
-    if (!code || !name || !areaCode || !language || typeof enableGlobalTransfer !== "boolean") {
-      const errorResponse = { success: false, message: "Missing required fields: code, name, areaCode, language, and enableGlobalTransfer (boolean) are required." };
-      console.log("Response from /merchant/core/mcb/common/mobileAreaCode:", errorResponse);
-      return res.status(400).json(errorResponse);
-    }
-
     const database = client.db("aiacard-sandbox-cities");
     const collection = database.collection("aiacard-sandcity-col");
 
-    // Upsert the mobile area code record.
-    const result = await collection.updateOne(
-      { type: "mobileAreaCode", code },
-      { $set: { code, name, areaCode, language, enableGlobalTransfer, type: "mobileAreaCode" } },
-      { upsert: true }
-    );
-    console.log("Mobile Area Code upsert result:", result);
+    // Find all documents with type "mobileAreaCode"
+    const mobileAreaCodes = await collection.find({ type: "mobileAreaCode" }).toArray();
+    console.log("Fetched Mobile Area Codes from MongoDB:", mobileAreaCodes);
 
-    // Fetch and log the full list of mobile area codes.
-    const mobiles = await collection.find({ type: "mobileAreaCode" }).toArray();
-    console.log("Full list of Mobile Area Codes:", mobiles);
-
-    const responsePayload = {
-      success: true,
-      message: "Mobile area code saved successfully.",
-      data: { code, name, areaCode, language, enableGlobalTransfer }
-    };
-
-    console.log("Response from /merchant/core/mcb/common/mobileAreaCode:", responsePayload);
-    return res.status(200).json(responsePayload);
+    return res.status(200).json({ success: true, data: mobileAreaCodes });
   } catch (error) {
-    console.error("Error in /merchant/core/mcb/common/mobileAreaCode:", error);
+    console.error("Error fetching mobile area codes:", error);
     return res.status(500).json({ success: false, message: error.message });
   }
 });
