@@ -2301,6 +2301,24 @@ app.post('/create-vault-account', async (req, res) => {
   }
 });
 
+app.post('/merchant/core/mcb/common/region', (req, res) => {
+  const response = getRegionList();
+  console.log("Country/Region List Response:", response);
+  res.json(response);
+});
+
+app.post('/merchant/core/mcb/common/city', (req, res) => {
+  const response = getCityList();
+  console.log("City List Response:", response);
+  res.json(response);
+});
+
+app.post('/merchant/core/mcb/common/mobileAreaCode', (req, res) => {
+  const response = getMobileAreaCodeList();
+  console.log("Mobile Code List Response:", response);
+  res.json(response);
+});
+
 
 // const server = app.listen(port, '0.0.0.0', () => {
 //   console.log(`🚀 Server running on port ${port}`);
