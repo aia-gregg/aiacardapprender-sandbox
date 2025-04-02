@@ -211,36 +211,36 @@ async function seedWasabiData() {
     const collection = db.collection("aiacard-sandcity-col");
 
     // Fetch region data using callWasabiApi
-    const regionResult = await callWasabiApi('/merchant/core/mcb/common/region', {});
-    console.log("Fetched Region Data from WasabiCard API:", regionResult);
-    if (regionResult.success && Array.isArray(regionResult.data)) {
-      for (const region of regionResult.data) {
-        // Expecting region to have properties: code, standardCode, name
-        await collection.updateOne(
-          { type: "region", code: region.code },
-          { $set: { ...region, type: "region" } },
-          { upsert: true }
-        );
-      }
-    } else {
-      console.warn("Region data not returned as expected:", regionResult);
-    }
-
-    // Fetch city data using callWasabiApi
-    // const cityResult = await callWasabiApi('/merchant/core/mcb/common/city', {});
-    // console.log("Fetched City Data from WasabiCard API:", cityResult);
-    // if (cityResult.success && Array.isArray(cityResult.data)) {
-    //   for (const city of cityResult.data) {
-    //     // Expecting city to have properties: code, name, country, countryStandardCode
+    // const regionResult = await callWasabiApi('/merchant/core/mcb/common/region', {});
+    // console.log("Fetched Region Data from WasabiCard API:", regionResult);
+    // if (regionResult.success && Array.isArray(regionResult.data)) {
+    //   for (const region of regionResult.data) {
+    //     // Expecting region to have properties: code, standardCode, name
     //     await collection.updateOne(
-    //       { type: "city", code: city.code },
-    //       { $set: { ...city, type: "city" } },
+    //       { type: "region", code: region.code },
+    //       { $set: { ...region, type: "region" } },
     //       { upsert: true }
     //     );
     //   }
     // } else {
-    //   console.warn("City data not returned as expected:", cityResult);
+    //   console.warn("Region data not returned as expected:", regionResult);
     // }
+
+    // Fetch city data using callWasabiApi
+    const cityResult = await callWasabiApi('/merchant/core/mcb/common/city', {});
+    console.log("Fetched City Data from WasabiCard API:", cityResult);
+    if (cityResult.success && Array.isArray(cityResult.data)) {
+      for (const city of cityResult.data) {
+        // Expecting city to have properties: code, name, country, countryStandardCode
+        await collection.updateOne(
+          { type: "city", code: city.code },
+          { $set: { ...city, type: "city" } },
+          { upsert: true }
+        );
+      }
+    } else {
+      console.warn("City data not returned as expected:", cityResult);
+    }
 
     // Fetch mobile area code data using callWasabiApi
     // const mobileResult = await callWasabiApi('/merchant/core/mcb/common/mobileAreaCode', {});
