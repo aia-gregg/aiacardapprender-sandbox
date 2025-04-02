@@ -193,6 +193,48 @@ app.post('/api/reset-2fa', async (req, res) => {
   }
 });
 
+// Dynamic Region List Endpoint
+app.post('/merchant/core/mcb/common/region', async (req, res) => {
+  try {
+    const database = client.db("aiacard-sandbox-db"); // Use your database name
+    // Query the regions collection for current data
+    const regions = await database.collection("regions").find({}).toArray();
+    console.log("Dynamic Region List Response:", regions);
+    res.json({ success: true, code: 200, msg: "Success", data: regions });
+  } catch (error) {
+    console.error("Error fetching dynamic region list:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Dynamic City List Endpoint
+app.post('/merchant/core/mcb/common/city', async (req, res) => {
+  try {
+    const database = client.db("aiacard-sandbox-db"); // Use your database name
+    // Query the cities collection for current data
+    const cities = await database.collection("cities").find({}).toArray();
+    console.log("Dynamic City List Response:", cities);
+    res.json({ success: true, code: 200, msg: "Success", data: cities });
+  } catch (error) {
+    console.error("Error fetching dynamic city list:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Dynamic Mobile Code List Endpoint
+app.post('/merchant/core/mcb/common/mobileAreaCode', async (req, res) => {
+  try {
+    const database = client.db("aiacard-sandbox-db"); // Use your database name
+    // Query the mobileCodes collection for current data
+    const mobileCodes = await database.collection("mobileCodes").find({}).toArray();
+    console.log("Dynamic Mobile Code List Response:", mobileCodes);
+    res.json({ success: true, code: 200, msg: "Success", data: mobileCodes });
+  } catch (error) {
+    console.error("Error fetching dynamic mobile area code list:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 // Endpoint to fetch referrals for a given referral ID
 app.get('/referrals', async (req, res) => {
   const { referralId } = req.query;
