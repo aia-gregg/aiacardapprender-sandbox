@@ -64,7 +64,7 @@ client.connect()
   .then(() => {
     console.log("✅ Connected to MongoDB");
     // Call seedData on server start
-    seedData();
+    seedWasabiData();
   })
   .catch((err) => console.error("❌ Error connecting to MongoDB:", err));
 
