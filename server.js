@@ -201,75 +201,61 @@ app.post('/api/reset-2fa', async (req, res) => {
   }
 });
 
-// --- Startup Data Seeding Function ---
+// --- Startup Data Seeding Function Using callWasabiApi ---
 async function seedWasabiData() {
   try {
     console.log("Starting data seeding from WasabiCard API...");
 
-    // Use the external WasabiCard endpoints
-    const regionApiUrl = "https://sandbox-api-merchant.wasabicard.com/merchant/core/mcb/common/region";
-    const cityApiUrl = "https://sandbox-api-merchant.wasabicard.com/merchant/core/mcb/common/city";
-    const mobileApiUrl = "https://sandbox-api-merchant.wasabicard.com/merchant/core/mcb/common/mobileAreaCode";
-
-    // Get your MongoDB collection
+    // Get the MongoDB collection for storing region, city, and mobile area code data
     const db = client.db("aiacard-sandbox-cities");
     const collection = db.collection("aiacard-sandcity-col");
 
-    // --- Fetch and Upsert Region Data ---
-    const regionRes = await fetch(regionApiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}) // Modify if the external API requires a specific payload
-    });
-    const regionData = await regionRes.json();
-    console.log("Fetched Region Data from WasabiCard API:", regionData);
-    if (Array.isArray(regionData)) {
-      for (const region of regionData) {
-        // Expecting each region record to have: code, standardCode, name
+    // Fetch region data using callWasabiApi
+    const regionResult = await callWasabiApi('/merchant/core/mcb/common/region', {});
+    console.log("Fetched Region Data from WasabiCard API:", regionResult);
+    if (regionResult.success && Array.isArray(regionResult.data)) {
+      for (const region of regionResult.data) {
+        // Expecting region to have properties: code, standardCode, name
         await collection.updateOne(
           { type: "region", code: region.code },
           { $set: { ...region, type: "region" } },
           { upsert: true }
         );
       }
+    } else {
+      console.warn("Region data not returned as expected:", regionResult);
     }
 
-    // --- Fetch and Upsert City Data ---
-    const cityRes = await fetch(cityApiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({})
-    });
-    const cityData = await cityRes.json();
-    console.log("Fetched City Data from WasabiCard API:", cityData);
-    if (Array.isArray(cityData)) {
-      for (const city of cityData) {
-        // Expecting each city record to have: code, name, country, countryStandardCode
+    // Fetch city data using callWasabiApi
+    const cityResult = await callWasabiApi('/merchant/core/mcb/common/city', {});
+    console.log("Fetched City Data from WasabiCard API:", cityResult);
+    if (cityResult.success && Array.isArray(cityResult.data)) {
+      for (const city of cityResult.data) {
+        // Expecting city to have properties: code, name, country, countryStandardCode
         await collection.updateOne(
           { type: "city", code: city.code },
           { $set: { ...city, type: "city" } },
           { upsert: true }
         );
       }
+    } else {
+      console.warn("City data not returned as expected:", cityResult);
     }
 
-    // --- Fetch and Upsert Mobile Area Code Data ---
-    const mobileRes = await fetch(mobileApiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({})
-    });
-    const mobileData = await mobileRes.json();
-    console.log("Fetched Mobile Area Code Data from WasabiCard API:", mobileData);
-    if (Array.isArray(mobileData)) {
-      for (const mobile of mobileData) {
-        // Expecting each mobile record to have: code, name, areaCode, language, enableGlobalTransfer
+    // Fetch mobile area code data using callWasabiApi
+    const mobileResult = await callWasabiApi('/merchant/core/mcb/common/mobileAreaCode', {});
+    console.log("Fetched Mobile Area Code Data from WasabiCard API:", mobileResult);
+    if (mobileResult.success && Array.isArray(mobileResult.data)) {
+      for (const mobile of mobileResult.data) {
+        // Expecting mobile to have properties: code, name, areaCode, language, enableGlobalTransfer
         await collection.updateOne(
           { type: "mobileAreaCode", code: mobile.code },
           { $set: { ...mobile, type: "mobileAreaCode" } },
           { upsert: true }
         );
       }
+    } else {
+      console.warn("Mobile area code data not returned as expected:", mobileResult);
     }
 
     console.log("Data seeding complete.");
