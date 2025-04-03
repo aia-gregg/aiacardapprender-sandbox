@@ -465,7 +465,6 @@ app.post('/openCard', async (req, res) => {
 });
 
 // Endpoint to update referral rewards to "Processing" for pending transactions in the previous month
-// Endpoint to update referral rewards to "Processing" for pending transactions in the previous month
 app.post('/update-referral-rewards', async (req, res) => {
   const { referralId } = req.body;
   if (!referralId) {
@@ -484,29 +483,26 @@ app.post('/update-referral-rewards', async (req, res) => {
     const startDate = new Date(prevYear, prevMonth, 1);  // first day of previous month
     const endDate = new Date(prevYear, prevMonth + 1, 0, 23, 59, 59, 999);  // last day of previous month
 
-    // Use the new database and collection
+    // Use your new database and collection
     const referralDb = client.db("aiacard-sandbox-referee");
     const referralCol = referralDb.collection("aia-sandreferee-col");
 
-    // Filter for documents with matching metaField referralId, rewardStatus "Pending",
-    // and created in the previous month.
+    // First, update all documents that are still pending (and in the previous month)
     const filter = {
-      "metadata.referralId": referralId,
+      referralId,
       rewardStatus: "Pending",
       createTime: { $gte: startDate, $lte: endDate }
     };
-
-    // Update the rewardStatus to "Processing"
     const update = { $set: { rewardStatus: "Processing" } };
 
     const result = await referralCol.updateMany(filter, update);
     console.log(`Updated ${result.modifiedCount} documents for referralId ${referralId}`);
 
-    // Retrieve the updated transactions for confirmation.
+    // Now, retrieve all transactions in the previous month that are either still pending or have been updated to processing.
     const updatedTransactions = await referralCol
       .find({
-        "metadata.referralId": referralId,
-        rewardStatus: "Processing",
+        referralId,
+        rewardStatus: { $in: ["Pending", "Processing"] },
         createTime: { $gte: startDate, $lte: endDate }
       })
       .toArray();
