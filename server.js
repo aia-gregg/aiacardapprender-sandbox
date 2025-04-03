@@ -464,66 +464,6 @@ app.post('/openCard', async (req, res) => {
   }
 });
 
-// Referral Rewards Endpoint
-async function handleReferralReward(user, cardNo) {
-  console.log("📢 [ReferralReward] Called with:", { email: user.email, cardNo });
-
-  if (!user || !user.referralId) {
-    console.log("❌ [ReferralReward] User missing or no referralId. Skipping.");
-    return;
-  }
-
-  const referralDb = client.db("aiacard-sandbox-refer");
-  const referralCol = referralDb.collection("aiacard-sandrefer-col");
-
-  const activeCards = user.activeCards || 0;
-  const lastCardAiaIdField = `cardNo${activeCards}aiaId`;
-  const cardNoaiaId = user[lastCardAiaIdField];
-
-  console.log("🔎 [ReferralReward] Checking lastCardAiaIdField:", lastCardAiaIdField, "=", cardNoaiaId);
-
-  // Determine base value
-  let cardBaseValue = 0;
-  switch (cardNoaiaId) {
-    case 'lite': cardBaseValue = 4.9; break;
-    case 'pro': cardBaseValue = 9.9; break;
-    case 'elite': cardBaseValue = 14.9; break;
-    default:
-      console.warn(`❗ [ReferralReward] Unknown card type: ${cardNoaiaId}`);
-      return;
-  }
-
-  // Multiplier by tier
-  const refereeTier = user.refereeTier || 1;
-  let refereeMultiplier = 1;
-  switch (refereeTier) {
-    case 2: refereeMultiplier = 1.5; break;
-    case 3: refereeMultiplier = 2; break;
-    case 4: refereeMultiplier = 2.5; break;
-    case 5: refereeMultiplier = 3; break;
-  }
-
-  const commission = Decimal128.fromString((cardBaseValue * refereeMultiplier).toFixed(2));
-
-  const record = {
-    createTime: new Date(),
-    cardNo,
-    fullName: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
-    refereeTier,
-    commission,
-    rewardStatus: "Pending",
-    referralId: user.referralId,
-    cardNoaiaId
-  };
-
-  try {
-    const result = await referralCol.insertOne(record);
-    console.log("✅ [ReferralReward] Inserted record with _id:", result.insertedId);
-  } catch (err) {
-    console.error("❌ [ReferralReward] Failed to insert referral reward record:", err);
-  }
-}
-
 // Endpoint to update referral rewards to "Processing" for pending transactions in the previous month
 app.post('/update-referral-rewards', async (req, res) => {
   const { referralId } = req.body;
@@ -546,7 +486,8 @@ app.post('/update-referral-rewards', async (req, res) => {
     const referralDb = client.db("aiacard-sandbox-refer");
     const referralCol = referralDb.collection("aiacard-sandrefer-col");
 
-    // Filter: matching referralId, status "Pending", and created in previous month.
+    // Filter for documents with matching referralId, rewardStatus "Pending",
+    // and created in the previous month.
     const filter = {
       referralId,
       rewardStatus: "Pending",
