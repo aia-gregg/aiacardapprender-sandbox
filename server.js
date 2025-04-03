@@ -464,51 +464,6 @@ app.post('/openCard', async (req, res) => {
   }
 });
 
-app.post('/update-referral-rewards', async (req, res) => {
-  console.log('--- Received /update-referral-rewards Request ---');
-  console.log('Request Body:', req.body);
-
-  const { referralId, monthly } = req.body;
-  if (!referralId) {
-    console.log('Error: Missing referralId parameter');
-    return res.status(400).json({ success: false, message: "Missing referralId parameter" });
-  }
-
-  try {
-    console.log('Connecting to database "aiacard-sandbox-referee"...');
-    const referralDb = client.db("aiacard-sandbox-referee");
-    const referralCol = referralDb.collection("aia-sandreferee-col");
-
-    // Define the filter for pending transactions
-    const filter = { referralId, rewardStatus: "Pending" };
-    console.log('Update Filter:', filter);
-
-    // Prepare the update fields
-    const updateFields = { rewardStatus: "Processing" };
-    if (monthly) {
-      const now = new Date();
-      now.setDate(10); // Set payoutDate to the 10th of the current month
-      updateFields.payoutDate = now;
-      console.log('Monthly flag detected. Setting payoutDate to:', now);
-    }
-    console.log('Update Fields:', updateFields);
-
-    // Perform the update operation
-    const result = await referralCol.updateMany(filter, { $set: updateFields });
-    console.log(`Modified ${result.modifiedCount} documents for referralId ${referralId}`);
-
-    // Retrieve the updated transactions to send back to the client
-    const updatedTransactions = await referralCol.find({ referralId }).toArray();
-    console.log('Updated Transactions Retrieved:', updatedTransactions);
-
-    console.log('--- End of /update-referral-rewards Process ---');
-    return res.json({ success: true, updatedTransactions });
-  } catch (error) {
-    console.error('Error updating referral rewards:', error);
-    return res.status(500).json({ success: false, message: error.message });
-  }
-});
-
 // Helper function: send push notification using Expo push API
 async function sendPushNotification(expoPushToken, notificationData) {
   const message = {
