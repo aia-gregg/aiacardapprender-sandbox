@@ -464,7 +464,8 @@ app.post('/openCard', async (req, res) => {
   }
 });
 
-// Endpoint to update referral rewards to "Processing" for all pending transactions
+// Endpoint to update referral rewards: update all "Pending" transactions to "Processing"
+// then return all referral reward documents (regardless of status)
 app.post('/update-referral-rewards', async (req, res) => {
   const { referralId } = req.body;
   if (!referralId) {
@@ -472,20 +473,23 @@ app.post('/update-referral-rewards', async (req, res) => {
   }
 
   try {
-    // Use your new database and collection
+    // Use the new database and collection
     const referralDb = client.db("aiacard-sandbox-referee");
     const referralCol = referralDb.collection("aia-sandreferee-col");
 
-    // Update all documents with rewardStatus "Pending" for the given referralId
-    const filter = { referralId, rewardStatus: "Pending" };
+    // Update all documents that have rewardStatus "Pending" for the given referralId
+    const filter = {
+      referralId,
+      rewardStatus: "Pending"
+    };
     const update = { $set: { rewardStatus: "Processing" } };
 
     const result = await referralCol.updateMany(filter, update);
     console.log(`Updated ${result.modifiedCount} documents for referralId ${referralId}`);
 
-    // Retrieve all transactions with rewardStatus "Pending" or "Processing" for this referralId
+    // Retrieve ALL transactions for the given referralId regardless of their rewardStatus.
     const updatedTransactions = await referralCol
-      .find({ referralId, rewardStatus: { $in: ["Pending", "Processing"] } })
+      .find({ referralId })
       .toArray();
 
     return res.json({ success: true, updatedTransactions });
