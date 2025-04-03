@@ -512,6 +512,29 @@ app.post('/update-referral-rewards', async (req, res) => {
   }
 });
 
+// Helper function: send push notification using Expo push API
+async function sendPushNotification(expoPushToken, notificationData) {
+  const message = {
+    to: expoPushToken,
+    sound: 'default',
+    title: notificationData.title,
+    body: notificationData.desc,
+    data: { ...notificationData },
+  };
+
+  try {
+    const response = await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(message),
+    });
+    const data = await response.json();
+    console.log('Push notification response:', data);
+  } catch (error) {
+    console.error('Error sending push notification:', error);
+  }
+}
+
 // Webhook API
 app.post( '/webhook', express.json({
     verify: (req, res, buf) => {
@@ -551,31 +574,32 @@ app.post( '/webhook', express.json({
         }
 
         // Check for notification category header
-        const category = req.headers['x-wsb-category'];
-        if (category) {
-          console.log('Notification category:', category);
-          // Process category-based notifications concurrently
-          switch (category) {
-            case 'card_transaction':
-              processCardTransaction(req.body).catch(err =>
-                console.error('Error processing card_transaction:', err)
-              );
-              break;
-            case 'card_auth_transaction':
-              processCardAuthTransaction(req.body).catch(err =>
-                console.error('Error processing card_auth_transaction:', err)
-              );
-              break;
-            case 'card_fee_patch':
-              processCardFeePatch(req.body).catch(err =>
-                console.error('Error processing card_fee_patch:', err)
-              );
-              break;
-            default:
-              console.warn('Unhandled notification category:', category);
-          }
-          return; // Exit if category handled
+      const category = req.headers['x-wsb-category'];
+      if (category) {
+        console.log('Notification category:', category);
+        // Process category-based notifications concurrently
+        switch (category) {
+          case 'card_transaction':
+            processCardTransaction(req.body).catch(err =>
+              console.error('Error processing card_transaction:', err)
+            );
+            break;
+          case 'card_auth_transaction':
+            processCardAuthTransaction(req.body).catch(err =>
+              console.error('Error processing card_auth_transaction:', err)
+            );
+            break;
+          case 'card_fee_patch':
+            processCardFeePatch(req.body).catch(err =>
+              console.error('Error processing card_fee_patch:', err)
+            );
+            break;
+          default:
+            console.warn('Unhandled notification category:', category);
         }
+        return; // Exit if category was handled
+      }
+
 
         // Fallback processing if no category header
         const { orderNo, cardNo, type } = req.body;
@@ -676,6 +700,13 @@ async function processCardTransaction(payload) {
       };
       await insertNotification(notificationData);
 
+      // Send push notification if the user has an Expo push token
+      if (user.expoPushToken) {
+        await sendPushNotification(user.expoPushToken, notificationData);
+      } else {
+        console.warn(`No Expo push token found for user ${user.email}`);
+      }
+
       // Fetch the updated user record so that activeCards and new fields are current
       const updatedUser = await collection.findOne({ _id: user._id });
       console.log("Calling handleReferralReward with updated user:", { email: updatedUser.email, activeCards: updatedUser.activeCards });
@@ -726,6 +757,20 @@ async function processCardAuthTransaction(payload) {
     };
     
     await insertNotification(notificationData);
+
+    // If this notification targets a specific user, try to send a push notification
+    if (payload.holderId) {
+      const usersDb = client.db("aiacard-sandbox-db");
+      const usersCollection = usersDb.collection("aiacard-sandox-col");
+      const user = await usersCollection.findOne({ holderId: payload.holderId });
+      if (user && user.expoPushToken) {
+        await sendPushNotification(user.expoPushToken, notificationData);
+      } else {
+        console.warn(`No Expo push token found for holderId ${payload.holderId}`);
+      }
+    } else {
+      console.log("Broadcast push notification for all users not implemented.");
+    }
     
   } catch (error) {
     console.error('Error processing card auth transaction notification:', error);
@@ -757,6 +802,19 @@ async function processCardFeePatch(payload) {
       userNotify: payload.holderId || "All"  // Adjust if payload contains a specific holderId
     };
     await insertNotification(notificationData);
+
+    if (payload.holderId) {
+      const usersDb = client.db("aiacard-sandbox-db");
+      const usersCollection = usersDb.collection("aiacard-sandox-col");
+      const user = await usersCollection.findOne({ holderId: payload.holderId });
+      if (user && user.expoPushToken) {
+        await sendPushNotification(user.expoPushToken, notificationData);
+      } else {
+        console.warn(`No Expo push token found for holderId ${payload.holderId}`);
+      }
+    } else {
+      console.log("Broadcast push notification for all users not implemented.");
+    }
     
   } catch (error) {
     console.error('Error processing card fee patch notification:', error);
