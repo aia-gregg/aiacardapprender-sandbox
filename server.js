@@ -464,7 +464,7 @@ app.post('/openCard', async (req, res) => {
   }
 });
 
-// Endpoint to update referral rewards to "Processing" for pending transactions in the previous month
+// Endpoint to update referral rewards to "Processing" for all pending transactions
 app.post('/update-referral-rewards', async (req, res) => {
   const { referralId } = req.body;
   if (!referralId) {
@@ -472,39 +472,20 @@ app.post('/update-referral-rewards', async (req, res) => {
   }
 
   try {
-    // Compute the date range for the previous month.
-    const now = new Date();
-    let prevMonth = now.getMonth() - 1;
-    let prevYear = now.getFullYear();
-    if (prevMonth < 0) {
-      prevMonth = 11;
-      prevYear -= 1;
-    }
-    const startDate = new Date(prevYear, prevMonth, 1);  // first day of previous month
-    const endDate = new Date(prevYear, prevMonth + 1, 0, 23, 59, 59, 999);  // last day of previous month
-
     // Use your new database and collection
     const referralDb = client.db("aiacard-sandbox-referee");
     const referralCol = referralDb.collection("aia-sandreferee-col");
 
-    // First, update all documents that are still pending (and in the previous month)
-    const filter = {
-      referralId,
-      rewardStatus: "Pending",
-      createTime: { $gte: startDate, $lte: endDate }
-    };
+    // Update all documents with rewardStatus "Pending" for the given referralId
+    const filter = { referralId, rewardStatus: "Pending" };
     const update = { $set: { rewardStatus: "Processing" } };
 
     const result = await referralCol.updateMany(filter, update);
     console.log(`Updated ${result.modifiedCount} documents for referralId ${referralId}`);
 
-    // Now, retrieve all transactions in the previous month that are either still pending or have been updated to processing.
+    // Retrieve all transactions with rewardStatus "Pending" or "Processing" for this referralId
     const updatedTransactions = await referralCol
-      .find({
-        referralId,
-        rewardStatus: { $in: ["Pending", "Processing"] },
-        createTime: { $gte: startDate, $lte: endDate }
-      })
+      .find({ referralId, rewardStatus: { $in: ["Pending", "Processing"] } })
       .toArray();
 
     return res.json({ success: true, updatedTransactions });
