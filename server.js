@@ -464,6 +464,7 @@ app.post('/openCard', async (req, res) => {
   }
 });
 
+// Referral Rewards Endpoint
 async function handleReferralReward(user, cardNo) {
   console.log("📢 [ReferralReward] Called with:", { email: user.email, cardNo });
 
@@ -522,6 +523,53 @@ async function handleReferralReward(user, cardNo) {
     console.error("❌ [ReferralReward] Failed to insert referral reward record:", err);
   }
 }
+
+// Endpoint to update referral rewards to "Processing" for pending transactions in the previous month
+app.post('/update-referral-rewards', async (req, res) => {
+  const { referralId } = req.body;
+  if (!referralId) {
+    return res.status(400).json({ success: false, message: "Missing referralId parameter" });
+  }
+
+  try {
+    // Compute the date range for the previous month.
+    const now = new Date();
+    let prevMonth = now.getMonth() - 1;
+    let prevYear = now.getFullYear();
+    if (prevMonth < 0) {
+      prevMonth = 11;
+      prevYear -= 1;
+    }
+    const startDate = new Date(prevYear, prevMonth, 1);  // first day of previous month
+    const endDate = new Date(prevYear, prevMonth + 1, 0, 23, 59, 59, 999);  // last day of previous month
+
+    const referralDb = client.db("aiacard-sandbox-refer");
+    const referralCol = referralDb.collection("aiacard-sandrefer-col");
+
+    // Filter: matching referralId, status "Pending", and created in previous month.
+    const filter = {
+      referralId,
+      rewardStatus: "Pending",
+      createTime: { $gte: startDate, $lte: endDate }
+    };
+
+    // Update the rewardStatus to "Processing"
+    const update = { $set: { rewardStatus: "Processing" } };
+
+    const result = await referralCol.updateMany(filter, update);
+    console.log(`Updated ${result.modifiedCount} documents for referralId ${referralId}`);
+
+    // Retrieve the updated transactions for confirmation.
+    const updatedTransactions = await referralCol
+      .find({ referralId, rewardStatus: "Processing", createTime: { $gte: startDate, $lte: endDate } })
+      .toArray();
+
+    return res.json({ success: true, updatedTransactions });
+  } catch (error) {
+    console.error("Error updating referral rewards:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
 
 // Webhook API
 app.post( '/webhook', express.json({
