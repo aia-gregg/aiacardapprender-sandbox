@@ -1084,6 +1084,7 @@ app.post('/register', async (req, res) => {
     const database = client.db("aiacard-sandbox-db");
     const collection = database.collection("aiacard-sandox-col");
 
+    // Check if the email is already registered
     const existingUser = await collection.findOne({ email });
     if (existingUser) {
       return res.status(400).json({ success: false, message: "Email already registered. Please log in." });
@@ -1094,15 +1095,32 @@ app.post('/register', async (req, res) => {
     const otpExpiry = new Date();
     otpExpiry.setMinutes(otpExpiry.getMinutes() + 10);
 
+    // Helper function to trim the trailing space if present
+    const trimTrailingSpace = (str) => {
+      if (typeof str === 'string' && str.endsWith(' ')) {
+        return str.slice(0, -1);
+      }
+      return str;
+    };
+
+    // List of fields to check and trim if the last character is a space
+    const fieldsToTrim = ['firstName', 'lastName', 'email', 'mobile', 'address', 'postCode', 'referralId'];
+    fieldsToTrim.forEach(field => {
+      if (userData[field]) {
+        userData[field] = trimTrailingSpace(userData[field]);
+      }
+    });
+
+    // Insert the user data with the trimmed fields
     await collection.insertOne({
       ...userData,
-      email,
+      email, // Ensuring email is also passed as a top-level field
       password: hashedPassword,
       otp,
       otpExpiry,
       otpVerified: false,
-      isGAVerified: false,  // Explicitly include GA flag (false by default)
-      activeCards: 0      // Initialize activeCards to 0
+      isGAVerified: false,
+      activeCards: 0
     });
 
     console.log(`📩 Generated OTP for ${email}: ${otp}`);
