@@ -465,7 +465,7 @@ app.post('/openCard', async (req, res) => {
 });
 
 // Endpoint to update referral rewards to "Processing" for pending transactions in the previous month
-app.get('/update-referral-rewards', async (req, res) => {
+app.post('/update-referral-rewards', async (req, res) => {
   const { referralId } = req.body;
   if (!referralId) {
     return res.status(400).json({ success: false, message: "Missing referralId parameter" });
