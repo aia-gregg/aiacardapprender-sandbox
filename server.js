@@ -1150,6 +1150,42 @@ app.post('/top-up', async (req, res) => {
   }
 });
 
+// GET endpoint to fetch updated topup record based on orderNo
+app.get('/top-up-status', async (req, res) => {
+  const { orderNo } = req.query;
+  if (!orderNo) {
+    console.error('Validation error: Missing required query parameter: orderNo');
+    return res.status(400).json({
+      success: false,
+      message: 'Missing required query parameter: orderNo.'
+    });
+  }
+
+  try {
+    // Use environment variables for the topup database details.
+    const dbName = process.env.MONGODB_DB_NAME_TOPUP;
+    const collectionName = process.env.MONGODB_COLLECTION_TOPUP;
+    const topupRecord = await client.db(dbName).collection(collectionName).findOne({ orderNo });
+    
+    if (!topupRecord) {
+      console.error(`No topup record found for orderNo: ${orderNo}`);
+      return res.status(404).json({
+        success: false,
+        message: 'Topup record not found.'
+      });
+    }
+    
+    return res.status(200).json({ success: true, data: topupRecord });
+  } catch (error) {
+    console.error('Error in GET /top-up-status endpoint:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    });
+  }
+});
+
 // Freeze endpoint with dynamic Wasabi API call
 app.post('/merchant/core/mcb/card/freeze', async (req, res) => {
   const { cardNo, maskedCardNumber } = req.body;
