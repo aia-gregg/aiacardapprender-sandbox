@@ -564,30 +564,45 @@ app.post('/send-notification', async (req, res) => {
   }
 });
 
-// Webhook API
-app.post( '/webhook', express.json({
+// Placeholder functions for email and push notifications.
+// Replace these with your actual implementations.
+async function sendTopupEmail(to, subject, body) {
+  // e.g., using nodemailer or another email service.
+  console.log(`Sending email to ${to}: ${subject}\n${body}`);
+  // await emailService.send({ to, subject, body });
+}
+
+async function sendPushNotification(userId, message) {
+  // e.g., using Firebase Cloud Messaging (FCM) or another push service.
+  console.log(`Sending push notification to user ${userId}: ${message}`);
+  // await pushService.send({ userId, message });
+}
+
+app.post(
+  '/webhook',
+  express.json({
     verify: (req, res, buf) => {
       req.rawBody = buf.toString();
     },
   }),
   (req, res) => {
-    // Immediately acknowledge with the expected JSON response
+    // Immediately acknowledge the webhook with the expected JSON response.
     const responsePayload = {
       success: true,
       code: 200,
-      msg: "Success",
+      msg: 'Success',
       data: null,
     };
     res.status(200).json(responsePayload);
     console.log('Webhook acknowledged:', responsePayload);
 
-    // Process the webhook asynchronously
+    // Process the webhook asynchronously.
     setImmediate(async () => {
       try {
         console.log('Webhook raw payload:', req.rawBody);
         console.log('Webhook parsed payload:', req.body);
 
-        // Verify signature if provided
+        // Verify signature if provided.
         const signature = req.headers['x-signature'];
         if (signature) {
           const computedSignature = crypto
@@ -602,36 +617,78 @@ app.post( '/webhook', express.json({
           console.warn('No signature header found.');
         }
 
-        // Check for notification category header
-      const category = req.headers['x-wsb-category'];
-      if (category) {
-        console.log('Notification category:', category);
-        // Process category-based notifications concurrently
-        switch (category) {
-          case 'card_transaction':
-            processCardTransaction(req.body).catch(err =>
-              console.error('Error processing card_transaction:', err)
-            );
-            break;
-          case 'card_auth_transaction':
-            processCardAuthTransaction(req.body).catch(err =>
-              console.error('Error processing card_auth_transaction:', err)
-            );
-            break;
-          case 'card_fee_patch':
-            processCardFeePatch(req.body).catch(err =>
-              console.error('Error processing card_fee_patch:', err)
-            );
-            break;
-          default:
-            console.warn('Unhandled notification category:', category);
+        // Check for a notification category header and process accordingly.
+        const category = req.headers['x-wsb-category'];
+        if (category) {
+          console.log('Notification category:', category);
+          switch (category) {
+            case 'card_transaction':
+              processCardTransaction(req.body).catch((err) =>
+                console.error('Error processing card_transaction:', err)
+              );
+              break;
+            case 'card_auth_transaction':
+              processCardAuthTransaction(req.body).catch((err) =>
+                console.error('Error processing card_auth_transaction:', err)
+              );
+              break;
+            case 'card_fee_patch':
+              processCardFeePatch(req.body).catch((err) =>
+                console.error('Error processing card_fee_patch:', err)
+              );
+              break;
+            default:
+              console.warn('Unhandled notification category:', category);
+          }
+          return; // Exit processing after handling the category.
         }
-        return; // Exit if category was handled
-      }
 
+        // Destructure fields from the webhook payload.
+        const { merchantOrderNo, orderNo, status, type, cardNo, userEmail, userId } = req.body;
 
-        // Fallback processing if no category header
-        const { orderNo, cardNo, type } = req.body;
+        // Process deposit update if merchantOrderNo and status are provided and cardNo is absent.
+        if (merchantOrderNo && status && !cardNo) {
+          console.log('Processing deposit update webhook for merchantOrderNo:', merchantOrderNo);
+
+          // Use the topup DB details from environment variables.
+          const dbName = process.env.MONGODB_DB_NAME_TOPUP;
+          const collectionName = process.env.MONGODB_COLLECTION_TOPUP;
+          const depositDB = client.db(dbName);
+          const depositCollection = depositDB.collection(collectionName);
+
+          // Update the deposit record with the new status and orderNo.
+          const updateResult = await depositCollection.updateOne(
+            { merchantOrderNo },
+            { $set: { status, orderNo, updatedAt: new Date() } }
+          );
+
+          if (updateResult.modifiedCount > 0) {
+            console.log(`Deposit record updated for merchantOrderNo: ${merchantOrderNo} with status: ${status}`);
+
+            // Send an email on successful topup.
+            // userEmail can be provided in the webhook payload or looked up by merchantOrderNo.
+            if (userEmail) {
+              const emailSubject = 'Topup Successful';
+              const emailBody = `Your topup with order ${merchantOrderNo} has been updated to status: ${status}.`;
+              await sendTopupEmail(userEmail, emailSubject, emailBody);
+            } else {
+              console.warn('User email not provided; skipping email notification.');
+            }
+
+            // Send a push notification if userId is provided.
+            if (userId) {
+              const pushMessage = `Your topup (order ${merchantOrderNo}) is now ${status}.`;
+              await sendPushNotification(userId, pushMessage);
+            } else {
+              console.warn('User ID not provided; skipping push notification.');
+            }
+          } else {
+            console.error(`Failed to update deposit record for merchantOrderNo: ${merchantOrderNo}`);
+          }
+          return;
+        }
+
+        // Fallback processing for card activation (or similar) webhook.
         if (!orderNo || !cardNo) {
           console.error('Missing orderNo or cardNo in webhook payload.');
           return;
@@ -641,41 +698,37 @@ app.post( '/webhook', express.json({
           return;
         }
 
-        // Connect to the database
-        const database = client.db("aiacard-sandbox-db");
-        const collection = database.collection("aiacard-sandox-col");
+        // Process card activation update.
+        const database = client.db('aiacard-sandbox-db');
+        const collection = database.collection('aiacard-sandox-col');
 
-        // Find the user by orderNo (ensure this field is indexed)
+        // Find the user by orderNo (ensure this field is indexed).
         const user = await collection.findOne({ orderNo });
         if (!user) {
           console.error(`No user found with orderNo: ${orderNo}`);
           return;
         }
 
-        // Calculate new card index and field name
+        // Calculate the new card index and field name for the user record.
         const activeCards = user.activeCards || 0;
         const newCardIndex = activeCards + 1;
         const cardFieldName = `cardNo${newCardIndex}`;
 
-        // Update the user record concurrently with other operations
-        const updatePromise = collection.updateOne(
+        // Update the user record concurrently with other operations.
+        const updateResult = await collection.updateOne(
           { _id: user._id },
           {
-            $set: { [cardFieldName]: cardNo, orderNo: "" },
+            $set: { [cardFieldName]: cardNo, orderNo: '' },
             $inc: { activeCards: 1 },
           }
         );
 
-        // Optionally, you can fire off additional operations in parallel here.
-
-        const updateResult = await updatePromise;
         if (updateResult.modifiedCount > 0) {
           console.log(`User ${user.email} updated: ${cardFieldName} set to ${cardNo}. Active cards: ${newCardIndex}`);
           await handleReferralReward(user, cardNo);
         } else {
           console.error('Failed to update user record with new card information.');
         }
-        
       } catch (err) {
         console.error('Error processing webhook:', err);
       }
