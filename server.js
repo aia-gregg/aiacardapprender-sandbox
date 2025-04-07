@@ -263,6 +263,48 @@ app.post('/api/reset-2fa', async (req, res) => {
 //   }
 // }
 
+// Coupon Verification Endpoint
+// Database: aiacard-sandbox-voucher
+// Collection: aiacard-sandvouch-col
+// Coupon validation endpoint:
+app.post('/validate-coupon', async (req, res) => {
+  try {
+    const { couponCode } = req.body;
+    if (!couponCode) {
+      return res.status(400).json({ success: false, message: "Missing coupon code." });
+    }
+    
+    // Connect to the coupon database and collection
+    const database = client.db("aiacard-sandbox-voucher");
+    const collection = database.collection("aiacard-sandvouch-col");
+    
+    // Query for the coupon using the provided coupon code (ensure stored codes are in uppercase)
+    const coupon = await collection.findOne({ couponCode: couponCode.trim().toUpperCase() });
+    
+    if (!coupon) {
+      return res.status(400).json({ success: false, message: "Invalid coupon." });
+    }
+    
+    // Check coupon expiry
+    const expiryDate = new Date(coupon.expiry);
+    const now = new Date();
+    if (now > expiryDate) {
+      return res.status(400).json({ success: false, message: "Coupon expired." });
+    }
+    
+    // Coupon is valid – return discount details (ensure your coupon documents include a discountPercent field)
+    return res.json({
+      success: true,
+      discountPercent: coupon.discountPercent,
+      message: "Coupon valid."
+    });
+  } catch (error) {
+    console.error("Error validating coupon:", error);
+    return res.status(500).json({ success: false, message: "Internal server error", error: error.message });
+  }
+});
+
+
 // Endpoint to fetch referrals for a given referral ID
 app.get('/referrals', async (req, res) => {
   const { referralId } = req.query;
