@@ -632,7 +632,7 @@ app.post(
 
           // Update the deposit record with the new status and orderNo.
           const updateResult = await depositCollection.updateMany(
-            { merchantOrderNo },
+            { merchantOrderNo, "meta.holderId": userId },
             { $set: { status, orderNo, updatedAt: new Date() } }
           );
 
