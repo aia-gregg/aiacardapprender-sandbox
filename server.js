@@ -405,7 +405,7 @@ async function openCard(holderId, email, aiaCardId) {
     merchantOrderNo: generateMerchantOrderNo(),
     holderId: holderId,
     cardTypeId: 111016,
-    amount: 45,
+    amount: 50,
     aiaCardId: aiaCardId, // Use the passed AIACardId (e.g., 'lite', 'pro', or 'elite')
   };
 
@@ -464,29 +464,6 @@ app.post('/openCard', async (req, res) => {
   }
 });
 
-// Helper function: send push notification using Expo push API
-async function sendPushNotification(expoPushToken, notificationData) {
-  const message = {
-    to: expoPushToken,
-    sound: 'default',
-    title: notificationData.title,
-    body: notificationData.desc,
-    data: { ...notificationData },
-  };
-
-  try {
-    const response = await fetch('https://exp.host/--/api/v2/push/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(message),
-    });
-    const data = await response.json();
-    console.log('Push notification response:', data);
-  } catch (error) {
-    console.error('Error sending push notification:', error);
-  }
-}
-
 // Helper function to send push notifications via FCM
 async function sendFCMPushNotification(deviceToken, notificationData) {
   const message = {
@@ -495,29 +472,44 @@ async function sendFCMPushNotification(deviceToken, notificationData) {
       title: notificationData.title,
       body: notificationData.body,
     },
-    data: notificationData.data || {}, // optional additional data
+    data: notificationData.data || {}, // Optional additional data payload
   };
 
   try {
     const response = await admin.messaging().send(message);
     console.log('FCM message sent successfully:', response);
+    return response;
   } catch (error) {
     console.error('Error sending FCM message:', error);
+    throw error;
   }
+}
+
+// Helper function: send push notification using Expo push API
+async function sendPushNotification(deviceToken, notificationData) {
+  const newNotificationData = {
+    ...notificationData,
+    body: notificationData.body || notificationData.desc,
+  };
+  return sendFCMPushNotification(deviceToken, newNotificationData);
 }
 
 // Endpoint to trigger FCM push notifications
 app.post('/send-notification', async (req, res) => {
-  const { deviceToken, title, body } = req.body;
-  if (!deviceToken || !title || !body) {
-    return res.status(400).json({ success: false, message: "Missing required fields" });
+  try {
+    const { deviceToken, title, body } = req.body;
+    if (!deviceToken || !title || !body) {
+      return res.status(400).json({ success: false, message: "Missing required fields" });
+    }
+    await sendPushNotification(deviceToken, { title, body });
+    res.json({ success: true, message: "Notification sent" });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Error sending notification",
+      error: error.message,
+    });
   }
-  await sendFCMPushNotification(deviceToken, {
-    title,
-    body,
-    data: { key: "value" }  // optional additional data
-  });
-  res.json({ success: true, message: "Notification sent" });
 });
 
 // Webhook API
@@ -667,35 +659,26 @@ async function processCardTransaction(payload) {
       { _id: user._id },
       {
         $set: { [cardFieldName]: cardNo, orderNo: "" },
-        $inc: { activeCards: 1 }
+        $inc: { activeCards: 1 },
       }
     );
     if (updateResult.modifiedCount > 0) {
       console.log(`(Notification) User ${user.email} updated: ${cardFieldName} set to ${cardNo}. Active cards: ${newCardIndex}`);
-
-      // Create a masked card number (last 4 digits)
       const maskedCardNo = "**** " + cardNo.slice(-4);
-
-      // Insert a notification document
       const notificationData = {
         title: "Card Activation",
         desc: `Your new card ending ${maskedCardNo} has been successfully created and activated. Happy spending!`,
         notifyTime: new Date(),
-        userNotify: user.holderId  // or "All" if applicable
+        userNotify: user.holderId
       };
-      await insertNotification(notificationData);
 
-      // Send push notification if the user has an Expo push token
-      if (user.expoPushToken) {
-        await sendPushNotification(user.expoPushToken, notificationData);
+      // Use FCM token if available, else fallback
+      if (user.fcmToken || user.expoPushToken) {
+        await sendPushNotification(user.fcmToken || user.expoPushToken, notificationData);
       } else {
-        console.warn(`No Expo push token found for user ${user.email}`);
+        console.warn(`No push token found for user ${user.email}`);
       }
-
-      // Fetch the updated user record so that activeCards and new fields are current
-      const updatedUser = await collection.findOne({ _id: user._id });
-      console.log("Calling handleReferralReward with updated user:", { email: updatedUser.email, activeCards: updatedUser.activeCards });
-      await handleReferralReward(updatedUser, cardNo);
+      // Additional processing (e.g., referral rewards) goes here.
     } else {
       console.error('(Notification) Failed to update user record for card transaction.');
     }
@@ -730,28 +713,25 @@ async function processCardAuthTransaction(payload) {
     await collection.insertOne(payload);
     console.log(`(Notification) Card auth transaction logged successfully.`);
     
-    // Create a masked card number using the last four digits
     const maskedCardNo = "**** " + cardNo.slice(-4);
-    
-    // Build a more user-friendly description using merchantName and amount
     const notificationData = {
       title: "Transaction",
-      desc: `Authorization transaction for ${currency} ${amount} from card ending ${maskedCardNo} has been processed at ${merchantName}.`,
+      desc: `Authorization transaction for ${amount} from card ending ${maskedCardNo} has been processed at ${merchantName}.`,
       notifyTime: new Date(),
-      userNotify: payload.holderId || "All" // Adjust if payload contains a specific holderId
+      userNotify: payload.holderId || "All"
     };
     
     await insertNotification(notificationData);
 
-    // If this notification targets a specific user, try to send a push notification
+    // Instead of using Expo-specific logic, check for a push token (fcmToken preferred)
     if (payload.holderId) {
       const usersDb = client.db("aiacard-sandbox-db");
       const usersCollection = usersDb.collection("aiacard-sandox-col");
       const user = await usersCollection.findOne({ holderId: payload.holderId });
-      if (user && user.expoPushToken) {
-        await sendPushNotification(user.expoPushToken, notificationData);
+      if (user && (user.fcmToken || user.expoPushToken)) {
+        await sendPushNotification(user.fcmToken || user.expoPushToken, notificationData);
       } else {
-        console.warn(`No Expo push token found for holderId ${payload.holderId}`);
+        console.warn(`No push token found for holderId ${payload.holderId}`);
       }
     } else {
       console.log("Broadcast push notification for all users not implemented.");
@@ -776,15 +756,12 @@ async function processCardFeePatch(payload) {
     await collection.insertOne(payload);
     console.log(`(Notification) Card fee patch transaction for tradeNo ${tradeNo} logged successfully.`);
     
-    // Create a masked card number using the last 4 digits
     const maskedCardNo = "**** " + cardNo.slice(-4);
-    
-    // Build a more user-friendly notification description
     const notificationData = {
       title: "Transaction Reversal",
       desc: `Reversal processed for ${currency} ${amount} for card ending ${maskedCardNo}.`,
       notifyTime: new Date(),
-      userNotify: payload.holderId || "All"  // Adjust if payload contains a specific holderId
+      userNotify: payload.holderId || "All"
     };
     await insertNotification(notificationData);
 
@@ -792,10 +769,10 @@ async function processCardFeePatch(payload) {
       const usersDb = client.db("aiacard-sandbox-db");
       const usersCollection = usersDb.collection("aiacard-sandox-col");
       const user = await usersCollection.findOne({ holderId: payload.holderId });
-      if (user && user.expoPushToken) {
-        await sendPushNotification(user.expoPushToken, notificationData);
+      if (user && (user.fcmToken || user.expoPushToken)) {
+        await sendPushNotification(user.fcmToken || user.expoPushToken, notificationData);
       } else {
-        console.warn(`No Expo push token found for holderId ${payload.holderId}`);
+        console.warn(`No push token found for holderId ${payload.holderId}`);
       }
     } else {
       console.log("Broadcast push notification for all users not implemented.");
@@ -826,6 +803,33 @@ app.get('/notifications', async (req, res) => {
   } catch (error) {
     console.error("Error fetching notifications:", error);
     res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Endpoint to save the FCM token for a user.
+// The token is stored in the "fcmTokens" array field in the user's document.
+app.post('/api/save-token', async (req, res) => {
+  const { email, token } = req.body;
+  if (!email || !token) {
+    return res.status(400).json({ success: false, message: "Email and token are required." });
+  }
+  try {
+    const database = client.db("aiacard-sandbox-db");
+    const collection = database.collection("aiacard-sandox-col");
+
+    // Use $addToSet so that the token is added only if it's not already in the array.
+    const updateResult = await collection.updateOne(
+      { email },
+      { $addToSet: { fcmTokens: token } }
+    );
+
+    // Optionally, you can log updateResult to verify changes.
+    console.log(`FCM token updated for ${email}:`, updateResult);
+
+    res.json({ success: true, message: "Token saved successfully." });
+  } catch (error) {
+    console.error("Error saving FCM token:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
   }
 });
 
