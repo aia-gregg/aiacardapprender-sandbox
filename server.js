@@ -564,20 +564,22 @@ app.post('/send-notification', async (req, res) => {
   }
 });
 
-// Placeholder functions for email and push notifications.
-// Replace these with your actual implementations.
+// Assuming you have Socket.IO set up
+const http = require('http').createServer(app);
+const io = require('socket.io')(http);
+
+// Placeholder functions for sending email and push notifications.
 async function sendTopupEmail(to, subject, body) {
-  // e.g., using nodemailer or another email service.
   console.log(`Sending email to ${to}: ${subject}\n${body}`);
   // await emailService.send({ to, subject, body });
 }
 
 async function sendPushNotification(userId, message) {
-  // e.g., using Firebase Cloud Messaging (FCM) or another push service.
   console.log(`Sending push notification to user ${userId}: ${message}`);
   // await pushService.send({ userId, message });
 }
 
+// Webhook endpoint
 app.post(
   '/webhook',
   express.json({
@@ -665,8 +667,23 @@ app.post(
           if (updateResult.modifiedCount > 0) {
             console.log(`Deposit record updated for merchantOrderNo: ${merchantOrderNo} with status: ${status}`);
 
+            // If the status is "success", send a notification package.
+            if (status === 'success') {
+              const notificationPackage = {
+                type: 'topup_success',
+                merchantOrderNo,
+                orderNo,
+                status,
+                timestamp: new Date(),
+                message: `Your topup with order ${merchantOrderNo} is now ${status}.`
+              };
+              // Emit the notification package via Socket.IO.
+              // Optionally, you could target a specific room or user using userId.
+              io.emit('notification', notificationPackage);
+              console.log('Notification package sent:', notificationPackage);
+            }
+
             // Send an email on successful topup.
-            // userEmail can be provided in the webhook payload or looked up by merchantOrderNo.
             if (userEmail) {
               const emailSubject = 'Topup Successful';
               const emailBody = `Your topup with order ${merchantOrderNo} has been updated to status: ${status}.`;
@@ -715,7 +732,7 @@ app.post(
         const cardFieldName = `cardNo${newCardIndex}`;
 
         // Update the user record concurrently with other operations.
-        const updateResult = await collection.updateOne(
+        const updateResult2 = await collection.updateOne(
           { _id: user._id },
           {
             $set: { [cardFieldName]: cardNo, orderNo: '' },
@@ -723,7 +740,7 @@ app.post(
           }
         );
 
-        if (updateResult.modifiedCount > 0) {
+        if (updateResult2.modifiedCount > 0) {
           console.log(`User ${user.email} updated: ${cardFieldName} set to ${cardNo}. Active cards: ${newCardIndex}`);
           await handleReferralReward(user, cardNo);
         } else {
