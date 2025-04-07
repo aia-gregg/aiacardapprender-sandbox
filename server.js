@@ -569,15 +569,15 @@ const http = require('http').createServer(app);
 const io = require('socket.io')(http);
 
 // Placeholder functions for sending email and push notifications.
-async function sendTopupEmail(to, subject, body) {
-  console.log(`Sending email to ${to}: ${subject}\n${body}`);
-  // await emailService.send({ to, subject, body });
-}
+// async function sendTopupEmail(to, subject, body) {
+//   console.log(`Sending email to ${to}: ${subject}\n${body}`);
+//   // await emailService.send({ to, subject, body });
+// }
 
-async function sendPushNotification(userId, message) {
-  console.log(`Sending push notification to user ${userId}: ${message}`);
-  // await pushService.send({ userId, message });
-}
+// async function sendPushNotification(userId, message) {
+//   console.log(`Sending push notification to user ${userId}: ${message}`);
+//   // await pushService.send({ userId, message });
+// }
 
 // Webhook endpoint
 app.post(
