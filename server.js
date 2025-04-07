@@ -975,7 +975,7 @@ async function processTopupNotification(payload) {
     // Optionally, send an email notification.
     if (user.email) {
       const emailSubject = 'Topup Successful';
-      const emailBody = `Your topup of $${amount} for order ${merchantOrderNo} has been successfully processed.`;
+      const emailBody = `Your topup of $${amount} for card ending ${maskedCardNo} has been successfully completed. Happy spending!`;
       await sendTopupEmail(user.email, emailSubject, emailBody);
     } else {
       console.warn('User email not provided; skipping email notification.');
