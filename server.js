@@ -1,4 +1,3 @@
-
 const express = require('express');
 const cors = require('cors');
 const bcryptjs = require('bcryptjs');
@@ -10,6 +9,7 @@ const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fet
 const stripe = require('stripe')('sk_test_51Qy1IkDO1xHmcck34QjJM47p4jkKFGViTuIVlbY1njZqObWxc9hWMvrWCsiSVgCRd08Xx1fyfXYG90Hxw6yl84WO00Xt3GGTjU'); // Test secret key
 const { merchantPrivateKey, callWasabiApi } = require('./wasabiApi');
 const fireblocks = require('./fireblocks');
+const admin = require('./firebaseadmin');
 // const http = require('http');
 const otplib = require('otplib');
 //const mongoose = require('mongoose');
@@ -388,7 +388,7 @@ app.post('/api/update-biometrics', async (req, res) => {
   }
 });
 
-// Helper: Generate a 6-digit OTP
+// Helper: Generate a 6-digit OTP code
 function generateOTP() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
@@ -453,7 +453,7 @@ async function openCard(holderId, email, aiaCardId) {
   }
 }
 
-// Express endpoint to expose openCard function
+// Express endpoint to expose openCard functions
 app.post('/openCard', async (req, res) => {
   try {
     const { holderId, email, aiaCardId } = req.body;
@@ -486,6 +486,39 @@ async function sendPushNotification(expoPushToken, notificationData) {
     console.error('Error sending push notification:', error);
   }
 }
+
+// Helper function to send push notifications via FCM
+async function sendFCMPushNotification(deviceToken, notificationData) {
+  const message = {
+    token: deviceToken,
+    notification: {
+      title: notificationData.title,
+      body: notificationData.body,
+    },
+    data: notificationData.data || {}, // optional additional data
+  };
+
+  try {
+    const response = await admin.messaging().send(message);
+    console.log('FCM message sent successfully:', response);
+  } catch (error) {
+    console.error('Error sending FCM message:', error);
+  }
+}
+
+// Endpoint to trigger FCM push notifications
+app.post('/send-notification', async (req, res) => {
+  const { deviceToken, title, body } = req.body;
+  if (!deviceToken || !title || !body) {
+    return res.status(400).json({ success: false, message: "Missing required fields" });
+  }
+  await sendFCMPushNotification(deviceToken, {
+    title,
+    body,
+    data: { key: "value" }  // optional additional data
+  });
+  res.json({ success: true, message: "Notification sent" });
+});
 
 // Webhook API
 app.post( '/webhook', express.json({
