@@ -619,7 +619,64 @@ app.post(
           console.warn('No signature header found.');
         }
 
-        // Check for a notification category header and process accordingly.
+        // Destructure fields from the webhook payload.
+        const { merchantOrderNo, orderNo, status, type, cardNo, userEmail, userId } = req.body;
+
+        // If this is a deposit, process it according to the deposit workflow.
+        if (type === 'deposit' && merchantOrderNo && status) {
+          console.log('Processing deposit update webhook for merchantOrderNo:', merchantOrderNo);
+
+          // Use the topup DB details from environment variables.
+          const dbName = process.env.MONGODB_DB_NAME_TOPUP;
+          const collectionName = process.env.MONGODB_COLLECTION_TOPUP;
+          const depositDB = client.db(dbName);
+          const depositCollection = depositDB.collection(collectionName);
+
+          // Update the deposit record with the new status and orderNo.
+          const updateResult = await depositCollection.updateOne(
+            { merchantOrderNo },
+            { $set: { status, orderNo, updatedAt: new Date() } }
+          );
+
+          if (updateResult.modifiedCount > 0) {
+            console.log(`Deposit record updated for merchantOrderNo: ${merchantOrderNo} with status: ${status}`);
+
+            // Build a notification payload for deposit notifications.
+            const notificationPayload = {
+              title: "Topup Successful",
+              desc: `Your topup with order ${merchantOrderNo} is now ${status}.`,
+              notifyTime: new Date(),
+              userNotify: userId || userEmail || "All"
+            };
+
+            // Insert the notification into the notifications collection.
+            await insertNotification(notificationPayload);
+            console.log("Deposit notification stored:", notificationPayload);
+
+            // Send an email on successful topup.
+            if (userEmail) {
+              const emailSubject = 'Topup Successful';
+              const emailBody = `Your topup with order ${merchantOrderNo} has been updated to status: ${status}.`;
+              await sendTopupEmail(userEmail, emailSubject, emailBody);
+            } else {
+              console.warn('User email not provided; skipping email notification.');
+            }
+
+            // Send a push notification if userId is provided.
+            if (userId) {
+              const pushMessage = `Your topup (order ${merchantOrderNo}) is now ${status}.`;
+              await sendPushNotification(userId, pushMessage);
+            } else {
+              console.warn('User ID not provided; skipping push notification.');
+            }
+          } else {
+            console.error(`Failed to update deposit record for merchantOrderNo: ${merchantOrderNo}`);
+          }
+          // Once processed, exit so that deposit payloads don't continue to category processing.
+          return;
+        }
+
+        // Check for a notification category header and process accordingly (for non-deposit payloads).
         const category = req.headers['x-wsb-category'];
         if (category) {
           console.log('Notification category:', category);
@@ -645,69 +702,14 @@ app.post(
           return; // Exit processing after handling the category.
         }
 
-        // Destructure fields from the webhook payload.
-          const { merchantOrderNo, orderNo, status, type, cardNo, userEmail, userId } = req.body;
-
-          // Process deposit update if merchantOrderNo and status are provided and type is "deposit".
-          if (merchantOrderNo && status && type === 'deposit') {
-            console.log('Processing deposit update webhook for merchantOrderNo:', merchantOrderNo);
-
-            // Use the topup DB details from environment variables.
-            const dbName = process.env.MONGODB_DB_NAME_TOPUP;
-            const collectionName = process.env.MONGODB_COLLECTION_TOPUP;
-            const depositDB = client.db(dbName);
-            const depositCollection = depositDB.collection(collectionName);
-
-            // Update the deposit record with the new status and orderNo.
-            const updateResult = await depositCollection.updateOne(
-              { merchantOrderNo },
-              { $set: { status, orderNo, updatedAt: new Date() } }
-            );
-
-            if (updateResult.modifiedCount > 0) {
-              console.log(`Deposit record updated for merchantOrderNo: ${merchantOrderNo} with status: ${status}`);
-
-              // Build a notification payload for deposit notifications.
-              const notificationPayload = {
-                title: "Topup Successful",
-                desc: `Your topup with order ${merchantOrderNo} is now ${status}.`,
-                notifyTime: new Date(),
-                userNotify: userId || userEmail || "All"
-              };
-
-              // Insert the notification into the notifications collection.
-              await insertNotification(notificationPayload);
-              console.log("Deposit notification stored:", notificationPayload);
-
-              // Send an email on successful topup.
-              if (userEmail) {
-                const emailSubject = 'Topup Successful';
-                const emailBody = `Your topup with order ${merchantOrderNo} has been updated to status: ${status}.`;
-                await sendTopupEmail(userEmail, emailSubject, emailBody);
-              } else {
-                console.warn('User email not provided; skipping email notification.');
-              }
-
-              // Send a push notification if userId is provided.
-              if (userId) {
-                const pushMessage = `Your topup (order ${merchantOrderNo}) is now ${status}.`;
-                await sendPushNotification(userId, pushMessage);
-              } else {
-                console.warn('User ID not provided; skipping push notification.');
-              }
-            } else {
-              console.error(`Failed to update deposit record for merchantOrderNo: ${merchantOrderNo}`);
-            }
-            return;
-          }
-
         // Fallback processing for card activation (or similar) webhook.
         if (!orderNo || !cardNo) {
           console.error('Missing orderNo or cardNo in webhook payload.');
           return;
         }
+        // Only process further if type is 'create' (for card activations).
         if (type !== 'create') {
-          console.log(`Webhook type is ${type} (expected 'create'). Skipping processing.`);
+          console.log(`Webhook type is ${type} (expected 'create' or 'deposit'). Skipping fallback processing.`);
           return;
         }
 
