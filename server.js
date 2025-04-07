@@ -273,41 +273,36 @@ app.post('/validate-coupon', async (req, res) => {
   try {
     const { couponCode } = req.body;
     if (!couponCode) {
-      const errResp = { success: false, message: 'Missing coupon code.' };
-      console.log('Response:', errResp);
-      return res.status(400).json(errResp);
+      return res.status(400).json({ success: false, message: 'Missing coupon code.' });
     }
 
     // Connect to the coupon database and collection
     const database = client.db('aiacard-sandbox-voucher');
     const collection = database.collection('aiacard-sandvouch-col');
 
-    // Query for the coupon using the provided coupon code (ensure stored codes are uppercase)
+    // Query for the coupon using the provided coupon code
     const coupon = await collection.findOne({ couponCode: couponCode.trim().toUpperCase() });
-
     if (!coupon) {
-      const errResp = { success: false, message: 'Invalid coupon.' };
-      console.log('Response:', errResp);
-      return res.status(400).json(errResp);
+      return res.status(400).json({ success: false, message: 'Invalid coupon.' });
     }
 
-    // Compare expiry date from MongoDB with current date
-    const expiryDate = new Date(coupon.expiry);
+    // IMPORTANT: use 'coupon.couponExpiry' instead of 'coupon.expiry'
+    const expiryDate = new Date(coupon.couponExpiry);
     const now = new Date();
+    console.log('Coupon expiry datetime:', expiryDate);
+    console.log('Current datetime:', now);
+
+    // Compare the two dates
     if (now > expiryDate) {
-      const errResp = { success: false, message: 'Coupon expired.' };
-      console.log('Response:', errResp);
-      return res.status(400).json(errResp);
+      return res.status(400).json({ success: false, message: 'Coupon expired.' });
     }
 
-    // Coupon is valid—log and return discount details (ensure discountPercent is in the coupon document)
-    const successResp = {
+    // Coupon is valid
+    return res.json({
       success: true,
       discountPercent: coupon.discountPercent,
       message: 'Coupon valid.',
-    };
-    console.log('Response:', successResp);
-    return res.json(successResp);
+    });
   } catch (error) {
     console.error('Error validating coupon:', error);
     return res.status(500).json({
