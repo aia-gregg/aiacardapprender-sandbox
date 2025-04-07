@@ -664,18 +664,18 @@ app.post(
               const emailSubject = 'Topup Successful';
               const emailBody = `Your topup with order ${merchantOrderNo} has been updated to status: ${status}.`;
               await sendTopupEmail(userEmail, emailSubject, emailBody);
-    } else {
-      console.warn('User email not provided; skipping email notification.');
-    }
+            } else {
+              console.warn('User email not provided; skipping email notification.');
+            }
 
-    // Send a push notification if holderId is provided.
-    const pushMessage = `Your topup (order ${merchantOrderNo}) is now ${status}.`;
-    await sendPushNotification(metaValue, pushMessage);
-  } else {
-    console.error(`Failed to update deposit record for merchantOrderNo: ${merchantOrderNo}`);
-  }
-  return;
-}
+            // Send a push notification if holderId is provided.
+            const pushMessage = `Your topup (order ${merchantOrderNo}) is now ${status}.`;
+            await sendPushNotification(metaValue, pushMessage);
+          } else {
+            console.error(`Failed to update deposit record for merchantOrderNo: ${merchantOrderNo}`);
+          }
+          return;
+        }
 
         // Check for a notification category header and process accordingly (for non-deposit payloads).
         const category = req.headers['x-wsb-category'];
@@ -1181,14 +1181,14 @@ app.post('/top-up', async (req, res) => {
   }
 });
 
-// GET endpoint to fetch updated topup record based on orderNo
+// GET endpoint to fetch updated topup record based on orderNo and holderId
 app.get('/top-up-status', async (req, res) => {
-  const { orderNo } = req.query;
-  if (!orderNo) {
-    console.error('Validation error: Missing required query parameter: orderNo');
+  const { orderNo, holderId } = req.query;
+  if (!orderNo || !holderId) {
+    console.error('Validation error: Missing required query parameters: orderNo and holderId');
     return res.status(400).json({
       success: false,
-      message: 'Missing required query parameter: orderNo.'
+      message: 'Missing required query parameters: orderNo and holderId.'
     });
   }
 
@@ -1196,16 +1196,20 @@ app.get('/top-up-status', async (req, res) => {
     // Use environment variables for the topup database details.
     const dbName = process.env.MONGODB_DB_NAME_TOPUP;
     const collectionName = process.env.MONGODB_COLLECTION_TOPUP;
-    const topupRecord = await client.db(dbName).collection(collectionName).findOne({ orderNo });
-    
+    // Query by both orderNo and holderId (the meta field)
+    const topupRecord = await client
+      .db(dbName)
+      .collection(collectionName)
+      .findOne({ orderNo, holderId });
+
     if (!topupRecord) {
-      console.error(`No topup record found for orderNo: ${orderNo}`);
+      console.error(`No topup record found for orderNo: ${orderNo} and holderId: ${holderId}`);
       return res.status(404).json({
         success: false,
         message: 'Topup record not found.'
       });
     }
-    
+
     return res.status(200).json({ success: true, data: topupRecord });
   } catch (error) {
     console.error('Error in GET /top-up-status endpoint:', error);
