@@ -618,14 +618,14 @@ app.post(
         }
 
         // Destructure fields from the webhook payload.
-        const { merchantOrderNo, orderNo, status, type, cardNo, userEmail, userId } = req.body;
+        const { merchantOrderNo, orderNo, status, type, cardNo, userEmail, holderId } = req.body;
 
         // Process deposit update if merchantOrderNo and status are provided and type is "deposit".
         if (merchantOrderNo && status && type === 'deposit') {
           console.log('Processing deposit update webhook for merchantOrderNo:', merchantOrderNo);
 
           // Ensure holderId is available since it must match the meta field.
-          const metaValue = req.body.holderId !== undefined ? req.body.holderId : null;
+          const metaValue = req.body.holderId;
           if (metaValue === null) {
             console.error("No holderId provided in deposit webhook payload; cannot update time-series deposit record.");
             return;
@@ -1149,7 +1149,7 @@ app.post('/top-up', async (req, res) => {
         transactionTime: new Date(data.data.transactionTime),
         details: data.data,
         createdAt: new Date(),
-        holderId: userId || null  // include meta field for time-series collection
+        holderId: req.body.holderId || null  // include meta field for time-series collection
       };
 
       // Log the record before insertion.
