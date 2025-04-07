@@ -1176,7 +1176,7 @@ app.post('/top-up', async (req, res) => {
   // Log the entire incoming request body for debugging
   console.log('Received /top-up request with payload:', req.body);
 
-  const { cardNo, merchantOrderNo, amount } = req.body;
+  const { cardNo, merchantOrderNo, amount, holderId } = req.body;
 
   // Validate required fields
   if (!cardNo || !merchantOrderNo || !amount) {
@@ -1249,7 +1249,6 @@ app.post('/top-up', async (req, res) => {
   }
 });
 
-// GET endpoint to fetch updated topup record based on orderNo and holderId
 // GET endpoint to fetch updated topup record based on orderNo and holderId
 app.get('/top-up-status', async (req, res) => {
   const orderNo = req.query.orderNo;
