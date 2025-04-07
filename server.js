@@ -626,7 +626,7 @@ app.post(
 
           // Ensure holderId is available since it must match the meta field.
           const metaValue = req.body.holderId;
-          if (metaValue === null) {
+          if (!metaValue) {
             console.error("No holderId provided in deposit webhook payload; cannot update time-series deposit record.");
             return;
           }
@@ -637,9 +637,9 @@ app.post(
           const depositDB = client.db(dbName);
           const depositCollection = depositDB.collection(collectionName);
 
-          // Update the deposit record with the new status and orderNo,
-          // filtering on both merchantOrderNo and the meta field (holderId).
-          const updateResult = await depositCollection.updateOne(
+          // Use updateMany instead of updateOne since time-series collections require a multi update
+          // when querying on a field that is not the meta field.
+          const updateResult = await depositCollection.updateMany(
             { merchantOrderNo, holderId: metaValue },
             { $set: { status, orderNo, updatedAt: new Date() } }
           );
@@ -918,6 +918,74 @@ async function processCardFeePatch(payload) {
   }
 }
 
+// Helper function to process Topup (Deposit) notifications
+async function processTopupNotification(payload) {
+  const { orderNo, merchantOrderNo, amount, status, holderId } = payload;
+  
+  // Validate required fields
+  if (!orderNo || !merchantOrderNo || !holderId) {
+    console.error('Missing orderNo, merchantOrderNo, or holderId in topup payload.');
+    return;
+  }
+  
+  // Only process notifications for successful topups
+  if (status !== 'success') {
+    console.log(`Topup status is ${status}. No notification triggered for non-successful status.`);
+    return;
+  }
+  
+  try {
+    // Fetch the user from the database using the holderId
+    const database = client.db("aiacard-sandbox-db");
+    const usersCollection = database.collection("aiacard-sandox-col");
+    const user = await usersCollection.findOne({ holderId });
+    if (!user) {
+      console.error(`No user found with holderId: ${holderId}`);
+      return;
+    }
+    
+    // Build the notification payload for a successful topup.
+    const notificationData = {
+      title: "Topup Successful",
+      desc: `Your topup of $${amount} for order ${merchantOrderNo} has been successfully processed.`,
+      notifyTime: new Date(),
+      userNotify: holderId,
+    };
+    
+    // Insert the notification into the notifications collection.
+    await insertNotification(notificationData);
+    console.log(`(Notification) Topup notification stored for holderId: ${holderId}`, notificationData);
+    
+    // Send push notifications using stored tokens.
+    let tokensSent = false;
+    if (user.fcmTokens && Array.isArray(user.fcmTokens) && user.fcmTokens.length > 0) {
+      for (const token of user.fcmTokens) {
+        await sendPushNotification(token, notificationData);
+      }
+      tokensSent = true;
+    }
+    if (!tokensSent && user.expoPushToken) {
+      await sendPushNotification(user.expoPushToken, notificationData);
+      tokensSent = true;
+    }
+    if (!tokensSent) {
+      console.warn(`No push token found for user ${user.email}`);
+    }
+    
+    // Optionally, send an email notification.
+    if (user.email) {
+      const emailSubject = 'Topup Successful';
+      const emailBody = `Your topup of $${amount} for order ${merchantOrderNo} has been successfully processed.`;
+      await sendTopupEmail(user.email, emailSubject, emailBody);
+    } else {
+      console.warn('User email not provided; skipping email notification.');
+    }
+    
+  } catch (error) {
+    console.error('Error processing topup notification:', error);
+  }
+}
+
 // New endpoint to fetch notifications from the dedicated notifications database/collection
 app.get('/notifications', async (req, res) => {
   try {
@@ -1182,8 +1250,11 @@ app.post('/top-up', async (req, res) => {
 });
 
 // GET endpoint to fetch updated topup record based on orderNo and holderId
+// GET endpoint to fetch updated topup record based on orderNo and holderId
 app.get('/top-up-status', async (req, res) => {
-  const { orderNo, holderId } = req.query;
+  const orderNo = req.query.orderNo;
+  const holderId = req.query.holderId;
+
   if (!orderNo || !holderId) {
     console.error('Validation error: Missing required query parameters: orderNo and holderId');
     return res.status(400).json({
@@ -1191,6 +1262,8 @@ app.get('/top-up-status', async (req, res) => {
       message: 'Missing required query parameters: orderNo and holderId.'
     });
   }
+
+  console.log(`Fetching topup record for orderNo: ${orderNo} and holderId: ${holderId}`);
 
   try {
     // Use environment variables for the topup database details.
@@ -1200,7 +1273,7 @@ app.get('/top-up-status', async (req, res) => {
     const topupRecord = await client
       .db(dbName)
       .collection(collectionName)
-      .findOne({ orderNo, holderId });
+      .findOne({ orderNo: orderNo, holderId: holderId });
 
     if (!topupRecord) {
       console.error(`No topup record found for orderNo: ${orderNo} and holderId: ${holderId}`);
