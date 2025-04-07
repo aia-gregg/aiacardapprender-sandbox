@@ -313,8 +313,6 @@ app.post('/validate-coupon', async (req, res) => {
   }
 });
 
-
-
 // Endpoint to fetch referrals for a given referral ID
 app.get('/referrals', async (req, res) => {
   const { referralId } = req.query;
@@ -775,6 +773,7 @@ async function processCardTransaction(payload) {
     const activeCards = user.activeCards || 0;
     const newCardIndex = activeCards + 1;
     const cardFieldName = `cardNo${newCardIndex}`;
+
     const updateResult = await collection.updateOne(
       { _id: user._id },
       {
@@ -782,6 +781,7 @@ async function processCardTransaction(payload) {
         $inc: { activeCards: 1 },
       }
     );
+
     if (updateResult.modifiedCount > 0) {
       console.log(`(Notification) User ${user.email} updated: ${cardFieldName} set to ${cardNo}. Active cards: ${newCardIndex}`);
       const maskedCardNo = "**** " + cardNo.slice(-4);
@@ -792,10 +792,22 @@ async function processCardTransaction(payload) {
         userNotify: user.holderId
       };
 
-      // Use FCM token if available, else fallback
-      if (user.fcmToken || user.expoPushToken) {
-        await sendPushNotification(user.fcmToken || user.expoPushToken, notificationData);
-      } else {
+      // Check for FCM tokens stored in an array
+      let tokensSent = false;
+      if (user.fcmTokens && Array.isArray(user.fcmTokens) && user.fcmTokens.length > 0) {
+        for (const token of user.fcmTokens) {
+          await sendPushNotification(token, notificationData);
+        }
+        tokensSent = true;
+      }
+
+      // Fallback: check for a singular Expo push token
+      if (!tokensSent && user.expoPushToken) {
+        await sendPushNotification(user.expoPushToken, notificationData);
+        tokensSent = true;
+      }
+
+      if (!tokensSent) {
         console.warn(`No push token found for user ${user.email}`);
       }
       // Additional processing (e.g., referral rewards) goes here.
