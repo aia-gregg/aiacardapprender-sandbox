@@ -1020,9 +1020,10 @@ app.post('/get-active-cards', async (req, res) => {
 });
 
 // New Topup/Deposit Endpoint
+// Example using Express.js for the /top-up endpoint
 app.post('/top-up', async (req, res) => {
-  // Log the entire request body to check what is being sent - DELETE
-  // console.log("Received /top-up request:", req.body);
+  // Log the entire incoming request body for debugging
+  console.log('Received /top-up request with payload:', req.body);
 
   const { cardNo, merchantOrderNo, amount } = req.body;
 
@@ -1036,21 +1037,22 @@ app.post('/top-up', async (req, res) => {
   }
 
   // Prepare payload for the Wasabi deposit API call.
-  // Added "currency": "USD" as a potential required field.
   const depositPayload = {
     cardNo,
     merchantOrderNo,
-    amount: amount, // Already formatted as a string like "51.75"
+    amount, // Expected to be a formatted string like "51.75"
     currency: "USD"
   };
-  // console.log('Sending deposit payload to Wasabi:', JSON.stringify(depositPayload)); // DELETE
+
+  // Log the payload being sent to the Wasabi API.
+  console.log('Sending deposit payload to Wasabi:', depositPayload);
 
   try {
-    // Call Wasabi deposit API using the helper function.
+    // Call the Wasabi deposit API using the helper function.
     const data = await callWasabiApi('/merchant/core/mcb/card/deposit', depositPayload);
 
-    // 3. Log the raw response - DELETE
-    // console.log('Wasabi deposit API response:', JSON.stringify(data));
+    // Log the raw response from Wasabi.
+    console.log('Wasabi deposit API response:', data);
 
     if (data.success && data.data && data.data.status === 'processing') {
       // Prepare topup record to save in MongoDB
@@ -1066,17 +1068,19 @@ app.post('/top-up', async (req, res) => {
         createdAt: new Date()
       };
 
+      // Log the record before insertion.
+      console.log('Inserting topup record into MongoDB:', topupRecord);
+
       const dbName = process.env.MONGODB_DB_NAME_TOPUP;
       const collectionName = process.env.MONGODB_COLLECTION_TOPUP;
-
-      // Log before insertion
-      // console.log('Inserting topup record into MongoDB:', JSON.stringify(topupRecord));
-
       const insertResult = await client.db(dbName).collection(collectionName).insertOne(topupRecord);
-      // console.log('MongoDB insertion result:', insertResult);
+
+      // Log the MongoDB insertion result.
+      console.log('MongoDB insertion result:', insertResult);
 
       return res.status(200).json({ success: true, data });
     } else {
+      console.error('Deposit API did not return processing status. Data:', data.data);
       return res.status(400).json({
         success: false,
         message: 'Deposit API call did not return a processing status.',
