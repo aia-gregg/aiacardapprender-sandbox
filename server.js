@@ -620,9 +620,16 @@ app.post(
         // Destructure fields from the webhook payload.
         const { merchantOrderNo, orderNo, status, type, cardNo, userEmail, userId } = req.body;
 
-        // If this is a deposit, process it according to the deposit workflow.
-        if (type === 'deposit' && merchantOrderNo && status) {
+        // Process deposit update if merchantOrderNo and status are provided and type is "deposit".
+        if (merchantOrderNo && status && type === 'deposit') {
           console.log('Processing deposit update webhook for merchantOrderNo:', merchantOrderNo);
+
+          // Ensure holderId is available since it must match the meta field.
+          const metaValue = req.body.holderId !== undefined ? req.body.holderId : null;
+          if (metaValue === null) {
+            console.error("No holderId provided in deposit webhook payload; cannot update time-series deposit record.");
+            return;
+          }
 
           // Use the topup DB details from environment variables.
           const dbName = process.env.MONGODB_DB_NAME_TOPUP;
@@ -630,9 +637,10 @@ app.post(
           const depositDB = client.db(dbName);
           const depositCollection = depositDB.collection(collectionName);
 
-          // Update the deposit record with the new status and orderNo.
-          const updateResult = await depositCollection.updateMany(
-            { merchantOrderNo, "meta.holderId": userId },
+          // Update the deposit record with the new status and orderNo,
+          // filtering on both merchantOrderNo and the meta field (holderId).
+          const updateResult = await depositCollection.updateOne(
+            { merchantOrderNo, holderId: metaValue },
             { $set: { status, orderNo, updatedAt: new Date() } }
           );
 
@@ -644,7 +652,7 @@ app.post(
               title: "Topup Successful",
               desc: `Your topup with order ${merchantOrderNo} is now ${status}.`,
               notifyTime: new Date(),
-              userNotify: userId || userEmail || "All"
+              userNotify: metaValue || userEmail || "All"
             };
 
             // Insert the notification into the notifications collection.
@@ -656,23 +664,18 @@ app.post(
               const emailSubject = 'Topup Successful';
               const emailBody = `Your topup with order ${merchantOrderNo} has been updated to status: ${status}.`;
               await sendTopupEmail(userEmail, emailSubject, emailBody);
-            } else {
-              console.warn('User email not provided; skipping email notification.');
-            }
+    } else {
+      console.warn('User email not provided; skipping email notification.');
+    }
 
-            // Send a push notification if userId is provided.
-            if (userId) {
-              const pushMessage = `Your topup (order ${merchantOrderNo}) is now ${status}.`;
-              await sendPushNotification(userId, pushMessage);
-            } else {
-              console.warn('User ID not provided; skipping push notification.');
-            }
-          } else {
-            console.error(`Failed to update deposit record for merchantOrderNo: ${merchantOrderNo}`);
-          }
-          // Once processed, exit so that deposit payloads don't continue to category processing.
-          return;
-        }
+    // Send a push notification if holderId is provided.
+    const pushMessage = `Your topup (order ${merchantOrderNo}) is now ${status}.`;
+    await sendPushNotification(metaValue, pushMessage);
+  } else {
+    console.error(`Failed to update deposit record for merchantOrderNo: ${merchantOrderNo}`);
+  }
+  return;
+}
 
         // Check for a notification category header and process accordingly (for non-deposit payloads).
         const category = req.headers['x-wsb-category'];
