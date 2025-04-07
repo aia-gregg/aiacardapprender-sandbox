@@ -1192,7 +1192,8 @@ app.post('/top-up', async (req, res) => {
     cardNo,
     merchantOrderNo,
     amount, // Expected to be a formatted string like "51.75"
-    currency: "USD"
+    currency: "USD",
+    holderId: holderId // Optional field
   };
 
   // Log the payload being sent to the Wasabi API.
