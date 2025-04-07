@@ -648,8 +648,8 @@ app.post(
         // Destructure fields from the webhook payload.
         const { merchantOrderNo, orderNo, status, type, cardNo, userEmail, userId } = req.body;
 
-        // Process deposit update if merchantOrderNo and status are provided and cardNo is absent.
-        if (merchantOrderNo && status && !cardNo) {
+        // Process deposit update if merchantOrderNo and status are provided and type is "deposit".
+        if (merchantOrderNo && status && type === 'deposit') {
           console.log('Processing deposit update webhook for merchantOrderNo:', merchantOrderNo);
 
           // Use the topup DB details from environment variables.
