@@ -595,36 +595,30 @@ app.post(
     };
     res.status(200).json(responsePayload);
     console.log('Webhook acknowledged:', responsePayload);
-  
-    // Process the webhook asynchronously.
+
     setImmediate(async () => {
       try {
         console.log('Webhook raw payload:', req.rawBody);
         console.log('Webhook parsed payload:', req.body);
-  
-        // Signature verification omitted for brevity...
-  
+
+        // (Signature verification code omitted for brevity)
+
         // Destructure fields from the webhook payload.
-        const { merchantOrderNo, orderNo, status, type, cardNo } = req.body;
-  
-        // -----------------------------------------------------
-        // Deposit Webhook Processing (Topup Updates)
-        // -----------------------------------------------------
+        const { merchantOrderNo, orderNo, status, type, cardNo, amount } = req.body;
+        // Process only deposit type webhooks
         if (merchantOrderNo && status && type === 'deposit') {
-          // Only process if the final status is "success"
           if (status !== 'success') {
             console.log(`Deposit webhook received status "${status}". Waiting for success event.`);
             return;
           }
           console.log('Processing deposit update webhook for merchantOrderNo:', merchantOrderNo);
-  
-          // Try to determine the holderId.
-          // First, check if it's provided in the webhook payload.
+
+          // Determine effective holderId:
+          // If webhook payload doesn’t include holderId, look it up using merchantOrderNo.
           let effectiveHolderId = req.body.holderId;
+          const dbName = process.env.MONGODB_DB_NAME_TOPUP || "aiacard-sandbox-topup";
+          const collectionName = process.env.MONGODB_COLLECTION_TOPUP || "aiacard-sandtopup-col";
           if (!effectiveHolderId) {
-            // If not provided, look up the deposit record in MongoDB by merchantOrderNo.
-            const dbName = process.env.MONGODB_DB_NAME_TOPUP || "aiacard-sandbox-topup";
-            const collectionName = process.env.MONGODB_COLLECTION_TOPUP || "aiacard-sandtopup-col";
             const depositRecord = await client.db(dbName).collection(collectionName)
               .findOne({ merchantOrderNo });
             effectiveHolderId = depositRecord?.holderId;
@@ -633,25 +627,23 @@ app.post(
               return;
             }
           }
-  
-          // Update the deposit record in MongoDB.
-          const dbName = process.env.MONGODB_DB_NAME_TOPUP || "aiacard-sandbox-topup";
-          const collectionName = process.env.MONGODB_COLLECTION_TOPUP || "aiacard-sandtopup-col";
+
+          // Update the deposit record with the final status
           const depositDB = client.db(dbName);
           const depositCollection = depositDB.collection(collectionName);
-  
           const updateResult = await depositCollection.updateMany(
             { merchantOrderNo, holderId: effectiveHolderId },
             { $set: { status, orderNo, updatedAt: new Date() } }
           );
-  
+
           if (updateResult.modifiedCount > 0) {
             console.log(`Deposit record updated for merchantOrderNo: ${merchantOrderNo} with status: ${status}`);
-            // Optionally, trigger notifications:
+
+            // Trigger notifications if needed.
             const topupPayload = {
               orderNo, // updated orderNo from Wasabi
               merchantOrderNo,
-              amount: req.body.amount, // or extract as needed,
+              amount, // extracted from webhook payload
               status,
               holderId: effectiveHolderId,
             };
@@ -659,7 +651,7 @@ app.post(
           } else {
             console.error(`Failed to update deposit record for merchantOrderNo: ${merchantOrderNo}`);
           }
-          return; // Exit deposit branch.
+          return;
         }
 
         // -----------------------------------------------------
