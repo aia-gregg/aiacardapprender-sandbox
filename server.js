@@ -1007,7 +1007,7 @@ async function processTopupNotification(payload) {
     const cardNumberForMask = depositRecord.cardNumber || user.cardNumber;
     let maskedCardNumber;
     if (cardNumberForMask) {
-      // Retrieve the card details with maskedCardNumber using the helper function
+      // Retrieve the card details with maskedCardNumber using the helper function.
       const cardDetail = await getMaskedCardNumber(cardNumberForMask, lookupHolderId);
       maskedCardNumber = cardDetail
         ? cardDetail.maskedCardNumber
@@ -1015,6 +1015,9 @@ async function processTopupNotification(payload) {
     } else {
       maskedCardNumber = "N/A";
     }
+    
+    // Debug log: show the computed maskedCardNumber
+    console.log(`DEBUG: Computed maskedCardNumber for holderId ${lookupHolderId}: ${maskedCardNumber}`);
     
     // Build the notification payload.
     const notificationData = {
@@ -1056,6 +1059,7 @@ async function processTopupNotification(payload) {
     console.error("Error processing topup notification:", error);
   }
 }
+
 
 
 // New endpoint to fetch notifications from the dedicated notifications database/collection
