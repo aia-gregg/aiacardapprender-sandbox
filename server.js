@@ -938,7 +938,6 @@ async function insertNotification(notificationData) {
   }
 }
 
-
 // Helper function to process Card Authorization Transaction notifications
 async function processCardAuthTransaction(payload) {
   const { cardNo, merchantName, amount, holderId } = payload;
@@ -1011,9 +1010,6 @@ async function processCardAuthTransaction(payload) {
   }
 }
 
-
-
-
 // Helper function to process Card Authorization Reversal Transaction notifications
 async function processCardFeePatch(payload) {
   const { cardNo, tradeNo, originTradeNo, currency, amount, holderId } = payload;
@@ -1081,8 +1077,6 @@ async function processCardFeePatch(payload) {
     console.error('Error processing card fee patch notification:', error);
   }
 }
-
-
 
 // Helper function to process Topup (Deposit) notifications
 // Updated helper function to process Topup (Deposit) notifications
@@ -1213,9 +1207,6 @@ async function processTopupNotification(payload) {
     console.error("Error processing topup notification:", error);
   }
 }
-
-
-
 
 // New endpoint to fetch notifications from the dedicated notifications database/collection
 app.get('/notifications', async (req, res) => {
