@@ -769,35 +769,108 @@ async function insertNotification(notificationData) {
   }
 }
 
-// helper to find maskedcardnumber
-async function getMaskedCardNumber(uniqueCardNo, holderId) {
-  if (!uniqueCardNo || !holderId) {
-    console.error("uniqueCardNo or holderId is missing.");
-    return null;
-  }
+// Updated helper function for calling the card-details endpoint
+async function callCardDetailsEndpoint(email, cardNo) {
   try {
-    const db = client.db("aiacard-sandbox-db");
-    // Query for the card details using the unique identifier (cardNo) and holderId.
-    const cardDetail = await db.collection("cards").findOne({ cardNo: uniqueCardNo, holderId });
-    if (!cardDetail) {
-      console.error(`No card details found for cardNo ${uniqueCardNo} and holderId ${holderId}.`);
-      return null;
-    }
-    // If maskedCardNumber is not defined or empty, generate it using the 16-digit cardNumber.
-    if (!cardDetail.maskedCardNumber || cardDetail.maskedCardNumber.trim() === "") {
-      if (cardDetail.cardNumber && cardDetail.cardNumber.length >= 4) {
-        cardDetail.maskedCardNumber = "**** " + cardDetail.cardNumber.slice(-4);
-      } else {
-        cardDetail.maskedCardNumber = "N/A";
-      }
-    }
-    return cardDetail;
+    const response = await fetch('https://aiacardapprender-sandbox.onrender.com/card-details', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, cardNo }),
+    });
+    return await response.json();
   } catch (error) {
-    console.error("Error fetching card detail:", error);
-    return null;
+    console.error("Error calling card-details endpoint:", error);
+    throw error;
   }
 }
 
+// Updated processCardTransaction function using the card-details endpoint
+async function processCardTransaction(payload) {
+  const { orderNo, cardNumber, type } = payload;
+  if (!orderNo || !cardNumber) {
+    console.error('Missing orderNo or cardNumber in card transaction payload.');
+    return;
+  }
+  if (type !== 'create') {
+    console.log(`Card transaction type is ${type}. No processing implemented for this type.`);
+    return;
+  }
+  try {
+    const database = client.db("aiacard-sandbox-db");
+    const collection = database.collection("aiacard-sandox-col");
+
+    const user = await collection.findOne({ orderNo });
+    if (!user) {
+      console.error(`No user found with orderNo: ${orderNo}`);
+      return;
+    }
+
+    const activeCards = user.activeCards || 0;
+    const newCardIndex = activeCards + 1;
+    const cardFieldName = `cardNumber${newCardIndex}`;
+
+    const updateResult = await collection.updateOne(
+      { _id: user._id },
+      {
+        $set: { [cardFieldName]: cardNumber, orderNo: "" },
+        $inc: { activeCards: 1 },
+      }
+    );
+
+    if (updateResult.modifiedCount > 0) {
+      console.log(`(Notification) User ${user.email} updated: ${cardFieldName} set to ${cardNumber}. Active cards: ${newCardIndex}`);
+      
+      // Retrieve the full card details via the card-details endpoint
+      let maskedCardNumber = "**** " + cardNumber.slice(-4); // fallback value
+      if (user.email) {
+        try {
+          const cardDetailsResponse = await callCardDetailsEndpoint(user.email, cardNumber);
+          if (cardDetailsResponse.success && cardDetailsResponse.data) {
+            const fullCardNumber = cardDetailsResponse.data.cardNumber;
+            if (fullCardNumber && fullCardNumber.length >= 4) {
+              maskedCardNumber = "**** " + fullCardNumber.slice(-4);
+            }
+          } else {
+            console.warn("Card-details endpoint did not return success; using fallback masked card number.");
+          }
+        } catch (err) {
+          console.error("Error retrieving card details via endpoint:", err);
+        }
+      } else {
+        console.warn("User email not available for calling card-details endpoint; using fallback masked card number.");
+      }
+
+      const notificationData = {
+        title: "Card Activation",
+        desc: `Your new card ending ${maskedCardNumber} has been successfully created and activated. Happy spending!`,
+        notifyTime: new Date(),
+        userNotify: user.holderId,
+      };
+
+      // Send push notifications using available tokens.
+      let tokensSent = false;
+      if (user.fcmTokens && Array.isArray(user.fcmTokens) && user.fcmTokens.length > 0) {
+        for (const token of user.fcmTokens) {
+          await sendPushNotification(token, notificationData);
+        }
+        tokensSent = true;
+      }
+      if (!tokensSent && user.expoPushToken) {
+        await sendPushNotification(user.expoPushToken, notificationData);
+        tokensSent = true;
+      }
+
+      if (!tokensSent) {
+        console.warn(`No push token found for user ${user.email}`);
+      }
+      // Additional processing (e.g., referral rewards) goes here.
+    } else {
+      console.error('(Notification) Failed to update user record for card transaction.');
+    }
+  } catch (error) {
+    console.error('Error processing card transaction notification:', error);
+  }
+}
 
 
 // Helper function to process Card Authorization Transaction notifications
@@ -808,16 +881,44 @@ async function processCardAuthTransaction(payload) {
     return;
   }
   console.log('Processing card auth transaction notification:', payload);
+  
   try {
+    // Insert the transaction payload into the cardAuthTransactions collection.
     const database = client.db("aiacard-sandbox-db");
     const collection = database.collection("cardAuthTransactions");
     await collection.insertOne(payload);
     console.log("(Notification) Card auth transaction logged successfully.");
     
-    // Retrieve the card details with the proper masked number
-    const cardDetail = await getMaskedCardNumber(cardNumber, holderId);
-    const maskedCardNumber = cardDetail ? cardDetail.maskedCardNumber : "**** " + cardNumber.slice(-4);
-
+    // Look up the user using holderId.
+    const usersDb = client.db("aiacard-sandbox-db");
+    const usersCollection = usersDb.collection("aiacard-sandox-col");
+    const user = await usersCollection.findOne({ holderId });
+    if (!user) {
+      console.error(`No user found for holderId: ${holderId}`);
+      return;
+    }
+    
+    // Retrieve the card details by calling your card-details endpoint.
+    let maskedCardNumber = "**** " + cardNumber.slice(-4);
+    if (user.email) {
+      try {
+        const cardDetailsResponse = await callCardDetailsEndpoint(user.email, cardNumber);
+        if (cardDetailsResponse.success && cardDetailsResponse.data) {
+          const fullCardNumber = cardDetailsResponse.data.cardNumber;
+          if (fullCardNumber && fullCardNumber.length >= 4) {
+            maskedCardNumber = "**** " + fullCardNumber.slice(-4);
+          }
+        } else {
+          console.warn("Card-details endpoint did not return success; using fallback masked card number.");
+        }
+      } catch (err) {
+        console.error("Error retrieving card details via endpoint:", err);
+      }
+    } else {
+      console.warn("User email not available for calling card-details endpoint; using fallback masked card number.");
+    }
+    
+    // Build the notification payload.
     const notificationData = {
       title: "Transaction",
       desc: `Authorization transaction for ${amount} from card ending ${maskedCardNumber} has been processed at ${merchantName}.`,
@@ -825,14 +926,12 @@ async function processCardAuthTransaction(payload) {
       userNotify: holderId || "All"
     };
     
+    // Insert the notification into the notifications collection.
     await insertNotification(notificationData);
-
-    // Send push notifications based on user's tokens
+    
+    // Send push notifications using the user's push tokens.
     if (holderId) {
-      const usersDb = client.db("aiacard-sandbox-db");
-      const usersCollection = usersDb.collection("aiacard-sandox-col");
-      const user = await usersCollection.findOne({ holderId });
-      if (user && (user.fcmToken || user.expoPushToken)) {
+      if (user.fcmToken || user.expoPushToken) {
         await sendPushNotification(user.fcmToken || user.expoPushToken, notificationData);
       } else {
         console.warn(`No push token found for holderId ${holderId}`);
@@ -848,6 +947,7 @@ async function processCardAuthTransaction(payload) {
 
 
 
+
 // Helper function to process Card Authorization Reversal Transaction notifications
 async function processCardFeePatch(payload) {
   const { cardNumber, tradeNo, originTradeNo, currency, amount, holderId } = payload;
@@ -856,15 +956,39 @@ async function processCardFeePatch(payload) {
     return;
   }
   console.log('Processing card fee patch (reversal) notification:', payload);
+  
   try {
     const database = client.db("aiacard-sandbox-db");
     const collection = database.collection("cardFeePatchTransactions");
     await collection.insertOne(payload);
     console.log(`(Notification) Card fee patch transaction for tradeNo ${tradeNo} logged successfully.`);
     
-    // Get the card details with masked card number using our helper function
-    const cardDetail = await getMaskedCardNumber(cardNumber, holderId);
-    const maskedCardNumber = cardDetail ? cardDetail.maskedCardNumber : "**** " + cardNumber.slice(-4);
+    // Look up the user using holderId
+    const usersDb = client.db("aiacard-sandbox-db");
+    const usersCollection = usersDb.collection("aiacard-sandox-col");
+    const user = await usersCollection.findOne({ holderId });
+    
+    // Set a fallback for maskedCardNumber using the provided cardNumber.
+    let maskedCardNumber = cardNumber ? "**** " + cardNumber.slice(-4) : "N/A";
+    
+    // If the user's email is available, call the card-details endpoint.
+    if (user && user.email && cardNumber) {
+      try {
+        const cardDetailsResponse = await callCardDetailsEndpoint(user.email, cardNumber);
+        if (cardDetailsResponse.success && cardDetailsResponse.data) {
+          const fullCardNumber = cardDetailsResponse.data.cardNumber;
+          if (fullCardNumber && fullCardNumber.length >= 4) {
+            maskedCardNumber = "**** " + fullCardNumber.slice(-4);
+          }
+        } else {
+          console.warn("Card-details endpoint did not return success; using fallback masked card number.");
+        }
+      } catch (err) {
+        console.error("Error retrieving card details via endpoint:", err);
+      }
+    } else {
+      console.warn("User email not available; using fallback masked card number.");
+    }
     
     const notificationData = {
       title: "Transaction Reversal",
@@ -874,11 +998,10 @@ async function processCardFeePatch(payload) {
     };
 
     await insertNotification(notificationData);
+    console.log(`(Notification) Card fee patch notification stored for tradeNo ${tradeNo}`, notificationData);
 
+    // Send push notifications using the user's tokens.
     if (holderId) {
-      const usersDb = client.db("aiacard-sandbox-db");
-      const usersCollection = usersDb.collection("aiacard-sandox-col");
-      const user = await usersCollection.findOne({ holderId });
       if (user && (user.fcmToken || user.expoPushToken)) {
         await sendPushNotification(user.fcmToken || user.expoPushToken, notificationData);
       } else {
@@ -892,6 +1015,7 @@ async function processCardFeePatch(payload) {
     console.error('Error processing card fee patch notification:', error);
   }
 }
+
 
 
 // Helper function to process Topup (Deposit) notifications
