@@ -1023,6 +1023,7 @@ async function processTopupNotification(payload) {
     }
 
     // Build the notification payload.
+    const maskedCardNo = user.maskedCardNumber || "****";
     const notificationData = {
       title: "Topup Successful",
       desc: `Your topup of $${amount} for card ending ${maskedCardNo} has been successfully completed.`,
