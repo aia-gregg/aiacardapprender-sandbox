@@ -1025,7 +1025,7 @@ async function processTopupNotification(payload) {
     // Build the notification payload.
     const notificationData = {
       title: "Topup Successful",
-      desc: `Your topup of $${amount} for order ${merchantOrderNo} has been successfully processed.`,
+      desc: `Your topup of $${amount} for card ending ${maskedCardNo} has been successfully completed.`,
       notifyTime: new Date(),
       userNotify: lookupHolderId,
     };
