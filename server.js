@@ -786,8 +786,8 @@ async function callCardDetailsEndpoint(email, cardNo) {
 
 // Updated processCardTransaction function using the card-details endpoint
 async function processCardTransaction(payload) {
-  const { orderNo, cardNumber, type } = payload;
-  if (!orderNo || !cardNumber) {
+  const { orderNo, cardNo, type } = payload;
+  if (!orderNo || !cardNo) {
     console.error('Missing orderNo or cardNumber in card transaction payload.');
     return;
   }
@@ -807,12 +807,12 @@ async function processCardTransaction(payload) {
 
     const activeCards = user.activeCards || 0;
     const newCardIndex = activeCards + 1;
-    const cardFieldName = `cardNumber${newCardIndex}`;
+    const cardFieldName = `cardNo${newCardIndex}`;
 
     const updateResult = await collection.updateOne(
       { _id: user._id },
       {
-        $set: { [cardFieldName]: cardNumber, orderNo: "" },
+        $set: { [cardFieldName]: cardNo, orderNo: "" },
         $inc: { activeCards: 1 },
       }
     );
@@ -875,9 +875,9 @@ async function processCardTransaction(payload) {
 
 // Helper function to process Card Authorization Transaction notifications
 async function processCardAuthTransaction(payload) {
-  const { cardNumber, merchantName, amount, holderId } = payload;
-  if (!cardNumber || !merchantName || amount == null) {
-    console.error('Missing cardNumber, merchantName, or amount in card auth transaction payload.');
+  const { cardNo, merchantName, amount, holderId } = payload;
+  if (!cardNo || !merchantName || amount == null) {
+    console.error('Missing cardNo, merchantName, or amount in card auth transaction payload.');
     return;
   }
   console.log('Processing card auth transaction notification:', payload);
@@ -950,8 +950,8 @@ async function processCardAuthTransaction(payload) {
 
 // Helper function to process Card Authorization Reversal Transaction notifications
 async function processCardFeePatch(payload) {
-  const { cardNumber, tradeNo, originTradeNo, currency, amount, holderId } = payload;
-  if (!cardNumber || !tradeNo || !originTradeNo || !currency || amount == null) {
+  const { cardNo, tradeNo, originTradeNo, currency, amount, holderId } = payload;
+  if (!cardNo || !tradeNo || !originTradeNo || !currency || amount == null) {
     console.error('Missing required fields in card fee patch payload.');
     return;
   }
