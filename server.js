@@ -1,6 +1,7 @@
 // SECURITY MTLS
-// const https = require('https');
-// const fs = require('fs');
+const https = require('https');
+const fs = require('fs');
+// SECURITY MTLS END
 const express = require('express');
 const cors = require('cors');
 const bcryptjs = require('bcryptjs');
@@ -54,29 +55,31 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 // SECURITY MTLS
-// const httpsOptions = {
-//   key: fs.readFileSync(process.env.SERVER_KEY_PATH),
-//   cert: fs.readFileSync(process.env.SERVER_CERT_PATH),
-//   ca: fs.readFileSync(process.env.CA_CERT_PATH),
-//   requestCert: true,          // Request a client certificate
-//   rejectUnauthorized: true    // Reject unauthorized clients
-// };
+const httpsOptions = {
+  key: fs.readFileSync(process.env.SERVER_KEY_PATH),
+  cert: fs.readFileSync(process.env.SERVER_CERT_PATH),
+  ca: fs.readFileSync(process.env.CA_CERT_PATH),
+  requestCert: true,          // Request a client certificate
+  rejectUnauthorized: true    // Reject unauthorized clients
+};
+// SECURITY MTLS END
 
 // Middleware
 // SECURITY MTLS
-// app.use((req, res, next) => {
-//   // Check if the client certificate was authorized.
-//   if (!req.client.authorized) {
-//     console.error('Client certificate was not authorized.');
-//     return res.status(401).send('Client certificate required.');
-//   }
-//   // Optionally, log some client certificate details:
-//   const cert = req.socket.getPeerCertificate();
-//   if (cert && cert.subject) {
-//     console.log('Client certificate subject:', cert.subject);
-//   }
-//   next();
-// });
+app.use((req, res, next) => {
+  // Check if the client certificate was authorized.
+  if (!req.client.authorized) {
+    console.error('Client certificate was not authorized.');
+    return res.status(401).send('Client certificate required.');
+  }
+  // Optionally, log some client certificate details:
+  const cert = req.socket.getPeerCertificate();
+  if (cert && cert.subject) {
+    console.log('Client certificate subject:', cert.subject);
+  }
+  next();
+});
+// SECURITY MTLS END
 app.use(cors());
 app.use(express.json());
 
@@ -2900,21 +2903,21 @@ app.post('/create-vault-account', async (req, res) => {
   }
 });
 
-// SECURITY MTLS (REPLACE BELWO)
-// const server = https.createServer(httpsOptions, app);
+// SECURITY MTLS (REPLACE BELOW)
+const server = https.createServer(httpsOptions, app);
 
-// server.listen(port, '0.0.0.0', () => {
-//   console.log(`🚀 mTLS-enabled Server running on port ${port}`);
-// });
-
-// server.on('error', (err) => {
-//   console.error('Server error:', err);
-// });
-
-const server = app.listen(port, '0.0.0.0', () => {
-  console.log(`🚀 Server running on port ${port}`);
+server.listen(port, '0.0.0.0', () => {
+  console.log(`🚀 mTLS-enabled Server running on port ${port}`);
 });
+
 server.on('error', (err) => {
   console.error('Server error:', err);
 });
+
+// const server = app.listen(port, '0.0.0.0', () => {
+//   console.log(`🚀 Server running on port ${port}`);
+// });
+// server.on('error', (err) => {
+//   console.error('Server error:', err);
+// });
 
