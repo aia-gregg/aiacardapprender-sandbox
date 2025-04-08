@@ -831,10 +831,11 @@ async function processCardTransaction(payload) {
       const newCardIndex = activeCards + 1;
       const cardFieldName = `cardNo${newCardIndex}`;
 
+      // Clear only orderNo, leaving merchantOrderNo intact for future deposit updates.
       const updateResult = await collection.updateOne(
         { _id: user._id },
         {
-          $set: { [cardFieldName]: cardNo, orderNo: "", merchantOrderNo: "" },
+          $set: { [cardFieldName]: cardNo, orderNo: "" },
           $inc: { activeCards: 1 },
         }
       );
@@ -892,7 +893,7 @@ async function processCardTransaction(payload) {
         console.error('(Notification) Failed to update user record for card creation.');
       }
     } else if (type === 'deposit') {
-      // Update deposit-related fields for the user record.
+      // Update deposit-related fields for the user record and clear merchantOrderNo after updating.
       const updateResult = await collection.updateOne(
         { _id: user._id },
         {
