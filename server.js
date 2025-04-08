@@ -813,7 +813,7 @@ async function processCardTransaction(payload) {
       const updateResult = await collection.updateOne(
         { _id: user._id },
         {
-          $set: { [cardFieldName]: cardNo, orderNo: "" },
+          $set: { [cardFieldName]: cardNo, }, // orderNo: "" 
           $inc: { activeCards: 1 },
         }
       );
