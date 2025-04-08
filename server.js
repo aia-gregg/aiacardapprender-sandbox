@@ -756,77 +756,106 @@ app.post('/get-topups', async (req, res) => {
 });
 
 // Helper function to process Card Transaction notifications
-async function processCardTransaction(payload) {
-  const { orderNo, cardNumber, type } = payload;
-  if (!orderNo || !cardNumber) {
-    console.error('Missing orderNo or cardNumber in card transaction payload.');
-    return;
-  }
-  if (type !== 'create') {
-    console.log(`Card transaction type is ${type}. No processing implemented for this type.`);
-    return;
-  }
-  try {
-    const database = client.db("aiacard-sandbox-db");
-    const collection = database.collection("aiacard-sandox-col");
+async function processTopupNotification(payload) {
+  const { orderNo, merchantOrderNo, amount, status } = payload;
 
-    const user = await collection.findOne({ orderNo });
-    if (!user) {
-      console.error(`No user found with orderNo: ${orderNo}`);
+  if (!orderNo || !merchantOrderNo) {
+    console.error("Missing orderNo or merchantOrderNo in topup payload.");
+    return;
+  }
+
+  if (status !== "success") {
+    console.log(`Topup status is ${status}. No notification triggered for non-successful topups.`);
+    return;
+  }
+
+  try {
+    // Look up the deposit record from the topup database/collection.
+    const depositRecord = await client
+      .db("aiacard-sandbox-topup")
+      .collection("aiacard-sandtopup-col")
+      .findOne({ merchantOrderNo });
+
+    if (!depositRecord) {
+      console.error(`No deposit record found for merchantOrderNo: ${merchantOrderNo}`);
       return;
     }
 
-    const activeCards = user.activeCards || 0;
-    const newCardIndex = activeCards + 1;
-    const cardFieldName = `cardNumber${newCardIndex}`;
+    // Use the holderId from the deposit record.
+    const lookupHolderId = depositRecord.holderId;
+    if (!lookupHolderId) {
+      console.error(`Deposit record for merchantOrderNo: ${merchantOrderNo} is missing holderId.`);
+      return;
+    }
 
-    const updateResult = await collection.updateOne(
-      { _id: user._id },
-      {
-        $set: { [cardFieldName]: cardNumber, orderNo: "" },
-        $inc: { activeCards: 1 },
-      }
-    );
+    // Look up the user from your main user collection.
+    const database = client.db("aiacard-sandbox-db");
+    const usersCollection = database.collection("aiacard-sandox-col");
+    const user = await usersCollection.findOne({ holderId: lookupHolderId });
+    
+    if (!user) {
+      console.error(`No user found for holderId: ${lookupHolderId}`);
+      return;
+    }
 
-    if (updateResult.modifiedCount > 0) {
-      console.log(`(Notification) User ${user.email} updated: ${cardFieldName} set to ${cardNumber}. Active cards: ${newCardIndex}`);
-
-      // Retrieve masked card number using the helper function
-      const cardDetail = await getMaskedCardNumber(cardNumber, user.holderId);
-      const maskedCardNumber = cardDetail ? cardDetail.maskedCardNumber : "**** " + cardNumber.slice(-4);
-
-      const notificationData = {
-        title: "Card Activation",
-        desc: `Your new card ending ${maskedCardNumber} has been successfully created and activated. Happy spending!`,
-        notifyTime: new Date(),
-        userNotify: user.holderId
-      };
-
-      // Send push notifications using FCM tokens if available
-      let tokensSent = false;
-      if (user.fcmTokens && Array.isArray(user.fcmTokens) && user.fcmTokens.length > 0) {
-        for (const token of user.fcmTokens) {
-          await sendPushNotification(token, notificationData);
-        }
-        tokensSent = true;
-      }
-      // Fallback: check for a singular Expo push token
-      if (!tokensSent && user.expoPushToken) {
-        await sendPushNotification(user.expoPushToken, notificationData);
-        tokensSent = true;
-      }
-
-      if (!tokensSent) {
-        console.warn(`No push token found for user ${user.email}`);
-      }
-      // Additional processing (e.g., referral rewards) can be added here.
+    // Retrieve the unique card identifier using depositRecord.cardNo,
+    // or, if missing, fall back to user's cardNumber.
+    const uniqueCardIdentifier = depositRecord.cardNo;
+    let maskedCardNumber;
+    if (uniqueCardIdentifier) {
+      // Retrieve card details (including the full 16-digit cardNumber) using the helper function.
+      const cardDetail = await getMaskedCardNumber(uniqueCardIdentifier, lookupHolderId);
+      maskedCardNumber = cardDetail
+        ? cardDetail.maskedCardNumber
+        : "**** " + (user.cardNumber ? user.cardNumber.slice(-4) : "N/A");
     } else {
-      console.error('(Notification) Failed to update user record for card transaction.');
+      maskedCardNumber = "N/A";
+    }
+    
+    // Debug log: show the computed maskedCardNumber.
+    console.log(`DEBUG: Computed maskedCardNumber for holderId ${lookupHolderId}: ${maskedCardNumber}`);
+
+    // Build the notification payload.
+    const notificationData = {
+      title: "Topup Successful",
+      desc: `Your topup of $${amount} for card ending ${maskedCardNumber} has been successfully completed.`,
+      notifyTime: new Date(),
+      userNotify: lookupHolderId,
+    };
+
+    // Insert the notification into the notifications collection.
+    await insertNotification(notificationData);
+    console.log(`(Notification) Topup notification stored for merchantOrderNo: ${merchantOrderNo}`, notificationData);
+
+    // Send push notifications using the user's push tokens.
+    let tokensSent = false;
+    if (user.fcmTokens && Array.isArray(user.fcmTokens) && user.fcmTokens.length > 0) {
+      for (const token of user.fcmTokens) {
+        await sendPushNotification(token, notificationData);
+      }
+      tokensSent = true;
+    }
+    if (!tokensSent && user.expoPushToken) {
+      await sendPushNotification(user.expoPushToken, notificationData);
+      tokensSent = true;
+    }
+    if (!tokensSent) {
+      console.warn(`No push token found for user ${user.email}`);
+    }
+
+    // Optionally, send an email notification.
+    if (user.email) {
+      const emailSubject = "Topup Successful";
+      const emailBody = `Your topup of $${amount} for card ending ${maskedCardNumber} has been successfully completed.`;
+      await sendTopupEmail(user.email, emailSubject, emailBody);
+    } else {
+      console.warn("User email not provided; skipping email notification.");
     }
   } catch (error) {
-    console.error('Error processing card transaction notification:', error);
+    console.error("Error processing topup notification:", error);
   }
 }
+
 
 
 // Helper function to insert a notification document into the notifications collection
@@ -842,27 +871,34 @@ async function insertNotification(notificationData) {
 }
 
 // helper to find maskedcardnumber
-async function getMaskedCardNumber(cardNumber, holderId) {
-  if (!cardNumber || !holderId) {
-    console.error("cardNumber or holderId is missing.");
+async function getMaskedCardNumber(uniqueCardNo, holderId) {
+  if (!uniqueCardNo || !holderId) {
+    console.error("uniqueCardNo or holderId is missing.");
     return null;
   }
   try {
     const db = client.db("aiacard-sandbox-db");
-    // Fetch the card details using both cardNumber and holderId
-    const cardDetail = await db.collection("cards").findOne({ cardNumber, holderId });
+    // Query for the card details using the unique identifier (cardNo) and holderId.
+    const cardDetail = await db.collection("cards").findOne({ cardNo: uniqueCardNo, holderId });
     if (!cardDetail) {
-      console.error(`No card details found for cardNumber ${cardNumber} and holderId ${holderId}.`);
+      console.error(`No card details found for cardNo ${uniqueCardNo} and holderId ${holderId}.`);
       return null;
     }
-    // Use the stored maskedCardNumber if available and valid, otherwise compute it
-    const masked = cardDetail.maskedCardNumber?.trim() || "**** " + cardNumber.slice(-4);
-    return { ...cardDetail, maskedCardNumber: masked };
+    // If maskedCardNumber is not defined or empty, generate it using the 16-digit cardNumber.
+    if (!cardDetail.maskedCardNumber || cardDetail.maskedCardNumber.trim() === "") {
+      if (cardDetail.cardNumber && cardDetail.cardNumber.length >= 4) {
+        cardDetail.maskedCardNumber = "**** " + cardDetail.cardNumber.slice(-4);
+      } else {
+        cardDetail.maskedCardNumber = "N/A";
+      }
+    }
+    return cardDetail;
   } catch (error) {
     console.error("Error fetching card detail:", error);
     return null;
   }
 }
+
 
 
 // Helper function to process Card Authorization Transaction notifications
