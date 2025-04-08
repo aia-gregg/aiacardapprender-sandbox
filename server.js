@@ -997,6 +997,21 @@ async function processCardFeePatch(payload) {
 
 // Helper function to process Topup (Deposit) notifications
 // Updated helper function to process Topup (Deposit) notifications
+async function callCardDetailsEndpoint(email, cardNo) {
+  try {
+    // Adjust this function using your preferred HTTP client (e.g., fetch, axios)
+    const response = await fetch('/card-details', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, cardNo }),
+    });
+    return await response.json();
+  } catch (error) {
+    console.error("Error calling card-details endpoint:", error);
+    throw error;
+  }
+}
+
 async function processTopupNotification(payload) {
   const { orderNo, merchantOrderNo, amount, status } = payload;
 
@@ -1011,7 +1026,7 @@ async function processTopupNotification(payload) {
   }
 
   try {
-    // Look up the deposit record from the topup collection using merchantOrderNo.
+    // Look up the deposit record from the topup database/collection.
     const depositRecord = await client
       .db("aiacard-sandbox-topup")
       .collection("aiacard-sandtopup-col")
@@ -1022,14 +1037,13 @@ async function processTopupNotification(payload) {
       return;
     }
 
-    // Use the holderId from the deposit record.
     const lookupHolderId = depositRecord.holderId;
     if (!lookupHolderId) {
       console.error(`Deposit record for merchantOrderNo: ${merchantOrderNo} is missing holderId.`);
       return;
     }
 
-    // Look up the user from your main user collection using lookupHolderId.
+    // Look up the user from your main user collection.
     const database = client.db("aiacard-sandbox-db");
     const usersCollection = database.collection("aiacard-sandox-col");
     const user = await usersCollection.findOne({ holderId: lookupHolderId });
@@ -1039,22 +1053,37 @@ async function processTopupNotification(payload) {
       return;
     }
 
-    // Retrieve cardNumber from the deposit record or fallback to the user's cardNumber.
-    const cardNumberForMask = depositRecord.cardNumber || user.cardNumber;
-    let maskedCardNumber;
-    if (cardNumberForMask) {
-      // Retrieve the card details with maskedCardNumber using the helper function.
-      const cardDetail = await getMaskedCardNumber(cardNumberForMask, lookupHolderId);
-      maskedCardNumber = cardDetail
-        ? cardDetail.maskedCardNumber
-        : "**** " + cardNumberForMask.slice(-4);
+    // Instead of fetching card details directly from the database,
+    // call your existing /card-details endpoint.
+    let maskedCardNumber = "N/A";
+    if (user.email) {
+      // Call the endpoint using the email and, if available, the card number from deposit or user.
+      const effectiveCardNo = depositRecord.cardNo || user.cardNumber;
+      try {
+        const cardDetailsResponse = await callCardDetailsEndpoint(user.email, effectiveCardNo);
+        if (cardDetailsResponse.success && cardDetailsResponse.data) {
+          maskedCardNumber = cardDetailsResponse.data.maskedCardNumber || maskedCardNumber;
+        } else {
+          console.warn("Card-details endpoint did not return success; using fallback masked card number.");
+          if (user.cardNumber) {
+            maskedCardNumber = "**** " + user.cardNumber.slice(-4);
+          }
+        }
+      } catch (err) {
+        console.error("Error retrieving card details via endpoint:", err);
+        if (user.cardNumber) {
+          maskedCardNumber = "**** " + user.cardNumber.slice(-4);
+        }
+      }
     } else {
-      maskedCardNumber = "N/A";
+      console.warn("User email not available for calling card-details endpoint; using fallback masked card number.");
+      if (user.cardNumber) {
+        maskedCardNumber = "**** " + user.cardNumber.slice(-4);
+      }
     }
     
-    // Debug log: show the computed maskedCardNumber
     console.log(`DEBUG: Computed maskedCardNumber for holderId ${lookupHolderId}: ${maskedCardNumber}`);
-    
+
     // Build the notification payload.
     const notificationData = {
       title: "Topup Successful",
@@ -1095,6 +1124,7 @@ async function processTopupNotification(payload) {
     console.error("Error processing topup notification:", error);
   }
 }
+
 
 
 
