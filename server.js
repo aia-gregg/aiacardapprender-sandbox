@@ -1119,90 +1119,70 @@ app.post('/card-auth-transactions', async (req, res) => {
 });
 
 // Endpoint to get active cards details for a user based on email
-app.post('/get-active-cards', async (req, res) => {
+app.post('/get-topups', async (req, res) => {
   try {
-    const { email } = req.body;
-    if (!email) {
-      return res.status(400).json({ success: false, message: "Email is required" });
-    }
-    
-    const database = client.db("aiacard-sandbox-db");
-    const collection = database.collection("aiacard-sandox-col");
-    
-    // Lookup user document by email
-    const user = await collection.findOne({ email });
-    if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
-    }
-    
-    const activeCardsCount = user.activeCards || 0;
-    const cardDetailsArray = [];
+    const { pageNum = 1, pageSize = 15, cardNo, startTime, endTime } = req.body;
 
-    for (let i = 1; i <= activeCardsCount; i++) {
-      const cardNoField = `cardNo${i}`;
-      const cardTypeField = `cardNo${i}aiaId`;
-      
-      const cardNo = user[cardNoField];
-      const aiaCardId = user[cardTypeField];  // e.g. 'lite', 'pro', or 'elite'
-      if (!cardNo) continue;
-      
-      // Prepare payload for the Wasabi Card Info API call
-      const payload = {
-        cardNo: cardNo,
-        onlySimpleInfo: false,
-      };
-      
-      // Call Wasabi's API using your helper function
-      const response = await callWasabiApi('/merchant/core/mcb/card/info', payload);
-      // console.log('Raw response from Wasabi API for cardNo:', cardNo, response);
-      
-      if (response && response.success && response.data) {
-        const data = response.data;
-        
-        // Decrypt the validPeriod (expiry) using the Java microservice.
-        const rawValidPeriod = data.validPeriod; // Encrypted expiry
-        const expiry = await decryptUsingMicroservice(rawValidPeriod) || 'N/A';
-        
-        // For cardNumber, do not attempt decryption—simply mask the last four digits.
-        const rawCardNumber = data.cardNumber;
-        let maskedCardNumber = "";
-        if (rawCardNumber && rawCardNumber.length >= 4) {
-          maskedCardNumber = "**** " + rawCardNumber.slice(-4);
-        }
-        
-        // Decrypt CVV if provided.
-        let decryptedCvv = null;
-        if (data.cvv) {
-          decryptedCvv = await decryptUsingMicroservice(data.cvv);
-        }
-        
-        const balance = data.balanceInfo?.amount || null;
-        
-        const cardDetail = {
-          aiaCardId,             // e.g., 'lite', 'pro', or 'elite'
-          cardNo: data.cardNo,     // Bank Card ID from Wasabi
-          maskedCardNumber,       // Now simply "**** " + last 4 digits
-          expiry,                 // Decrypted expiry or "N/A"
-          balance,                // Card balance
-          cvv: decryptedCvv,      // Decrypted CVV, if available
-          status: data.status,
-          statusStr: data.statusStr,
-          bindTime: data.bindTime,
-          remark: data.remark,
-        };
-        
-        cardDetailsArray.push(cardDetail);
-      } else {
-        console.error(`Failed to retrieve card info for cardNo: ${cardNo}`);
-      }
+    // Validate required parameters
+    if (!cardNo) {
+      return res.status(400).json({ success: false, message: "cardNo is required" });
     }
-    
-    return res.status(200).json({ success: true, data: cardDetailsArray });
+
+    // Build the query object.
+    // Note: Filtering on startTime/endTime may work properly only if the provided values are numeric.
+    const query = { cardNo };
+    if (startTime && endTime) {
+      query.transactionTime = {
+        $gte: Number(startTime),
+        $lte: Number(endTime)
+      };
+    }
+
+    const db = client.db("aiacard-sandbox-topup");
+    const collection = db.collection("aiacard-sandtopup-col");
+
+    // Fetch all matching records
+    const allRecords = await collection.find(query).toArray();
+
+    // Helper function: Convert transactionTime (which might be a number or a formatted string)
+    function convertTransactionTime(val) {
+      if (typeof val === 'number') {
+        return val;
+      } else if (typeof val === 'string') {
+        // Expecting format "DD-MM-YYYY, HH:mm:ss"
+        const parts = val.split(',');
+        if (parts.length < 2) return 0;
+        const datePart = parts[0].trim();  // e.g., "08-04-2025"
+        const timePart = parts[1].trim();  // e.g., "02:17:02"
+        const dateComponents = datePart.split('-'); // [DD, MM, YYYY]
+        const timeComponents = timePart.split(':'); // [HH, MM, SS]
+        if (dateComponents.length < 3 || timeComponents.length < 3) return 0;
+        const day = parseInt(dateComponents[0], 10);
+        const month = parseInt(dateComponents[1], 10) - 1; // JavaScript months are 0-indexed.
+        const year = parseInt(dateComponents[2], 10);
+        const hours = parseInt(timeComponents[0], 10);
+        const minutes = parseInt(timeComponents[1], 10);
+        const seconds = parseInt(timeComponents[2], 10);
+        return new Date(year, month, day, hours, minutes, seconds).getTime();
+      }
+      return 0;
+    }
+
+    // Sort the records by normalized transactionTime in descending order (newest first)
+    allRecords.sort((a, b) => convertTransactionTime(b.transactionTime) - convertTransactionTime(a.transactionTime));
+
+    // Get total count and perform pagination manually.
+    const total = allRecords.length;
+    const startIndex = (pageNum - 1) * Number(pageSize);
+    const paginatedRecords = allRecords.slice(startIndex, startIndex + Number(pageSize));
+
+    return res.json({ success: true, data: { total, records: paginatedRecords } });
   } catch (error) {
-    console.error("Error in /get-active-cards:", error);
-    return res.status(500).json({ success: false, message: "Server error" });
+    console.error("Error fetching topups:", error);
+    return res.status(500).json({ success: false, message: error.message });
   }
 });
+
 
 // New Topup/Deposit Endpoint
 // New Topup/Deposit Endpoint
