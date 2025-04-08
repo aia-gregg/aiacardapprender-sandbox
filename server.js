@@ -45,7 +45,8 @@ function generateMerchantOrderNo(length = 22) {
 const transactionCache = {};
 
 // Secret key for JWT (store securely in production)
-const secretKey = "your_super_secret_key";
+const secretKey = process.env.JWT_SECRET;
+
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -65,7 +66,6 @@ app.get('/api/get-hmac-secret', verifyJWT, (req, res) => {
   // For now we return the static key (be sure to rotate it periodically)
   res.json({ hmacSecret });
 });
-
 
 // Connect to MongoDB
 client.connect()
