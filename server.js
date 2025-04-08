@@ -717,6 +717,50 @@ app.post(
   }
 );
 
+// Endpoint to fetch paginated topup records from MongoDB
+app.post('/get-topups', async (req, res) => {
+  try {
+    const { pageNum = 1, pageSize = 15, cardNo, startTime, endTime } = req.body;
+
+    // Validate that cardNo is provided
+    if (!cardNo) {
+      return res.status(400).json({ success: false, message: "cardNo is required" });
+    }
+
+    // Build the query object with filtering criteria
+    const query = { cardNo };
+    if (startTime && endTime) {
+      query.transactionTime = {
+        $gte: Number(startTime),
+        $lte: Number(endTime)
+      };
+    }
+
+    // Connect to the topup database and collection
+    const db = client.db("aiacard-sandbox-topup");
+    const collection = db.collection("aiacard-sandtopup-col");
+
+    // Count total matching documents for pagination
+    const total = await collection.countDocuments(query);
+
+    // Retrieve the records sorted by transactionTime in descending order
+    const records = await collection.find(query)
+      .sort({ transactionTime: -1 })
+      .skip((pageNum - 1) * pageSize)
+      .limit(Number(pageSize))
+      .toArray();
+
+    return res.json({
+      success: true,
+      data: { total, records }
+    });
+  } catch (error) {
+    console.error("Error fetching topups:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+
 // Helper function to process Card Transaction notifications
 async function processCardTransaction(payload) {
   const { orderNo, cardNo, type } = payload;
