@@ -596,6 +596,7 @@ app.post(
     res.status(200).json(responsePayload);
     console.log('Webhook acknowledged:', responsePayload);
 
+    // Process the webhook asynchronously.
     setImmediate(async () => {
       try {
         console.log('Webhook raw payload:', req.rawBody);
@@ -605,7 +606,8 @@ app.post(
 
         // Destructure fields from the webhook payload.
         const { merchantOrderNo, orderNo, status, type, cardNo, amount } = req.body;
-        // Process only deposit type webhooks
+
+        // Process deposit-type webhook updates.
         if (merchantOrderNo && status && type === 'deposit') {
           if (status !== 'success') {
             console.log(`Deposit webhook received status "${status}". Waiting for success event.`);
@@ -613,39 +615,27 @@ app.post(
           }
           console.log('Processing deposit update webhook for merchantOrderNo:', merchantOrderNo);
 
-          // Determine effective holderId:
-          // If webhook payload doesn’t include holderId, look it up using merchantOrderNo.
-          let effectiveHolderId = req.body.holderId;
+          // Use environment variable settings or fall back to the default values.
           const dbName = process.env.MONGODB_DB_NAME_TOPUP || "aiacard-sandbox-topup";
           const collectionName = process.env.MONGODB_COLLECTION_TOPUP || "aiacard-sandtopup-col";
-          if (!effectiveHolderId) {
-            const depositRecord = await client.db(dbName).collection(collectionName)
-              .findOne({ merchantOrderNo });
-            effectiveHolderId = depositRecord?.holderId;
-            if (!effectiveHolderId) {
-              console.error("HolderId not found in deposit record for merchantOrderNo:", merchantOrderNo);
-              return;
-            }
-          }
 
-          // Update the deposit record with the final status
+          // Update the deposit record based solely on the merchantOrderNo.
           const depositDB = client.db(dbName);
           const depositCollection = depositDB.collection(collectionName);
           const updateResult = await depositCollection.updateMany(
-            { merchantOrderNo, holderId: effectiveHolderId },
+            { merchantOrderNo },
             { $set: { status, orderNo, updatedAt: new Date() } }
           );
 
           if (updateResult.modifiedCount > 0) {
             console.log(`Deposit record updated for merchantOrderNo: ${merchantOrderNo} with status: ${status}`);
 
-            // Trigger notifications if needed.
+            // Delegate notifications (if applicable).
             const topupPayload = {
               orderNo, // updated orderNo from Wasabi
               merchantOrderNo,
-              amount, // extracted from webhook payload
+              amount, // amount from webhook payload
               status,
-              holderId: effectiveHolderId,
             };
             await processTopupNotification(topupPayload);
           } else {
