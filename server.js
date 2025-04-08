@@ -1179,9 +1179,10 @@ app.post('/get-active-cards', async (req, res) => {
 });
 
 // New Topup/Deposit Endpoint
+// New Topup/Deposit Endpoint
 app.post('/top-up', async (req, res) => {
   console.log('Received /top-up request with payload:', req.body);
-  const { cardNo, merchantOrderNo, amount, holderId } = req.body;
+  const { cardNo, merchantOrderNo, amount, holderId, chosenCrypto } = req.body;
 
   if (!cardNo || !merchantOrderNo || !amount) {
     console.error("Validation error: Missing required fields", req.body);
@@ -1195,7 +1196,7 @@ app.post('/top-up', async (req, res) => {
     cardNo,
     merchantOrderNo,
     amount,
-    currency: "USD",
+    currency: "USD", // or set as needed
     holderId  // optional field
   };
 
@@ -1216,13 +1217,13 @@ app.post('/top-up', async (req, res) => {
         remark: data.data.remark,
         transactionTime: new Date(data.data.transactionTime),
         details: data.data,
+        chosenCrypto, // Store the chosen crypto details (name, network, display)
         createdAt: new Date(),
         holderId  // meta field for cross–referencing
       };
 
       console.log('Inserting topup record into MongoDB:', topupRecord);
 
-      // Updated new DB details.
       const dbName = "aiacard-sandbox-topup";
       const collectionName = "aiacard-sandtopup-col";
       const insertResult = await client.db(dbName).collection(collectionName).insertOne(topupRecord);
@@ -1247,6 +1248,7 @@ app.post('/top-up', async (req, res) => {
     });
   }
 });
+
 
 // GET endpoint to fetch updated topup record based on orderNo and holderId
 app.get('/top-up-status', async (req, res) => {
