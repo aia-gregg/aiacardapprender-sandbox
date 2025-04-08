@@ -586,7 +586,7 @@ app.post(
     },
   }),
   (req, res) => {
-    // Immediately acknowledge the webhook with the expected JSON response.
+    // Immediately acknowledge the webhook.
     const responsePayload = {
       success: true,
       code: 200,
@@ -620,7 +620,9 @@ app.post(
         // Destructure fields from the webhook payload.
         const { merchantOrderNo, orderNo, status, type, cardNo, userEmail, holderId } = req.body;
 
-        // For deposit-related webhooks: Only process if type is "deposit".
+        // -----------------------------------------------------
+        // Deposit Webhook Processing (Topup Updates)
+        // -----------------------------------------------------
         if (merchantOrderNo && status && type === 'deposit') {
           if (status !== 'success') {
             console.log(`Deposit webhook received status "${status}". Waiting for success event to update record.`);
@@ -628,32 +630,31 @@ app.post(
           }
           console.log('Processing deposit update webhook for merchantOrderNo:', merchantOrderNo);
 
-          // Ensure holderId is available.
           if (!holderId) {
-            console.error("No holderId provided in deposit webhook payload; cannot update time-series deposit record.");
+            console.error("No holderId provided in deposit webhook payload; cannot update deposit record.");
             return;
           }
 
-          // Use the topup DB details from environment variables.
-          const dbName = process.env.MONGODB_DB_NAME_TOPUP;
-          const collectionName = process.env.MONGODB_COLLECTION_TOPUP;
+          // New DB details for topup records.
+          const dbName = "aiacard-sandbox-topup";
+          const collectionName = "aiacard-sandtopup-col";
           const depositDB = client.db(dbName);
           const depositCollection = depositDB.collection(collectionName);
 
-          // Update deposit record using updateMany.
+          // Update the deposit record with the final status.
           const updateResult = await depositCollection.updateMany(
-            { merchantOrderNo, holderId: holderId },
+            { merchantOrderNo, holderId },
             { $set: { status, orderNo, updatedAt: new Date() } }
           );
 
           if (updateResult.modifiedCount > 0) {
             console.log(`Deposit record updated for merchantOrderNo: ${merchantOrderNo} with status: ${status}`);
 
-            // Now delegate processing of notifications to the helper function.
+            // Delegate processing of notifications.
             const topupPayload = {
-              orderNo,             // Updated orderNo returned from Wasabi
+              orderNo, // updated orderNo from Wasabi
               merchantOrderNo,
-              amount: req.body.amount, // or extract amount from req.body if available
+              amount: req.body.amount, // adjust if amount is provided in the webhook
               status,
               holderId,
             };
@@ -661,10 +662,12 @@ app.post(
           } else {
             console.error(`Failed to update deposit record for merchantOrderNo: ${merchantOrderNo}`);
           }
-          return; // Exit after processing deposit update.
+          return; // Exit after processing deposit branch.
         }
 
-        // Process non-deposit notifications based on a header "x-wsb-category".
+        // -----------------------------------------------------
+        // Process non-deposit notifications based on header category.
+        // -----------------------------------------------------
         const category = req.headers['x-wsb-category'];
         if (category) {
           console.log('Notification category:', category);
@@ -687,10 +690,12 @@ app.post(
             default:
               console.warn('Unhandled notification category:', category);
           }
-          return; // Exit after handling category.
+          return; // Exit after handling category notifications.
         }
 
-        // Fallback processing for card activation (or similar) webhooks.
+        // -----------------------------------------------------
+        // Fallback Processing for Card Activation (or similar) webhooks.
+        // -----------------------------------------------------
         if (!orderNo || !cardNo) {
           console.error('Missing orderNo or cardNo in webhook payload.');
           return;
@@ -700,7 +705,7 @@ app.post(
           return;
         }
 
-        // Process card activation update.
+        // For fallback card activation updates.
         const database = client.db('aiacard-sandbox-db');
         const collection = database.collection('aiacard-sandox-col');
         const user = await collection.findOne({ orderNo });
@@ -1151,14 +1156,10 @@ app.post('/get-active-cards', async (req, res) => {
 });
 
 // New Topup/Deposit Endpoint
-// Example using Express.js for the /top-up endpoint
 app.post('/top-up', async (req, res) => {
-  // Log the entire incoming request body for debugging
   console.log('Received /top-up request with payload:', req.body);
-
   const { cardNo, merchantOrderNo, amount, holderId } = req.body;
 
-  // Validate required fields
   if (!cardNo || !merchantOrderNo || !amount) {
     console.error("Validation error: Missing required fields", req.body);
     return res.status(400).json({
@@ -1167,27 +1168,22 @@ app.post('/top-up', async (req, res) => {
     });
   }
 
-  // Prepare payload for the Wasabi deposit API call.
   const depositPayload = {
     cardNo,
     merchantOrderNo,
-    amount, // Expected to be a formatted string like "51.75"
+    amount,
     currency: "USD",
-    holderId: holderId // Optional field
+    holderId  // optional field
   };
 
-  // Log the payload being sent to the Wasabi API.
   console.log('Sending deposit payload to Wasabi:', depositPayload);
 
   try {
-    // Call the Wasabi deposit API using the helper function.
     const data = await callWasabiApi('/merchant/core/mcb/card/deposit', depositPayload);
-
-    // Log the raw response from Wasabi.
     console.log('Wasabi deposit API response:', data);
 
     if (data.success && data.data && data.data.status === 'processing') {
-      // Prepare topup record to save in MongoDB
+      // Build the topup record using new DB details.
       const topupRecord = {
         merchantOrderNo,
         cardNo,
@@ -1198,17 +1194,16 @@ app.post('/top-up', async (req, res) => {
         transactionTime: new Date(data.data.transactionTime),
         details: data.data,
         createdAt: new Date(),
-        holderId: req.body.holderId  // include meta field for time-series collection
+        holderId  // meta field for cross–referencing
       };
 
-      // Log the record before insertion.
       console.log('Inserting topup record into MongoDB:', topupRecord);
 
-      const dbName = process.env.MONGODB_DB_NAME_TOPUP;
-      const collectionName = process.env.MONGODB_COLLECTION_TOPUP;
+      // Updated new DB details.
+      const dbName = "aiacard-sandbox-topup";
+      const collectionName = "aiacard-sandtopup-col";
       const insertResult = await client.db(dbName).collection(collectionName).insertOne(topupRecord);
 
-      // Log the MongoDB insertion result.
       console.log('MongoDB insertion result:', insertResult);
 
       return res.status(200).json({ success: true, data });
@@ -1246,21 +1241,14 @@ app.get('/top-up-status', async (req, res) => {
   console.log(`Fetching topup record for orderNo: ${orderNo} and holderId: ${holderId}`);
 
   try {
-    // Use environment variables for the topup database details.
-    const dbName = process.env.MONGODB_DB_NAME_TOPUP;
-    const collectionName = process.env.MONGODB_COLLECTION_TOPUP;
-    // Query by both orderNo and holderId (the meta field)
-    const topupRecord = await client
-      .db(dbName)
-      .collection(collectionName)
+    const dbName = "aiacard-sandbox-topup";
+    const collectionName = "aiacard-sandtopup-col";
+    const topupRecord = await client.db(dbName).collection(collectionName)
       .findOne({ orderNo: orderNo, holderId: holderId });
 
     if (!topupRecord) {
       console.error(`No topup record found for orderNo: ${orderNo} and holderId: ${holderId}`);
-      return res.status(404).json({
-        success: false,
-        message: 'Topup record not found.'
-      });
+      return res.status(404).json({ success: false, message: 'Topup record not found.' });
     }
 
     return res.status(200).json({ success: true, data: topupRecord });
