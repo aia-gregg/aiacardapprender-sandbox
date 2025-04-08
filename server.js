@@ -807,6 +807,7 @@ async function processCardTransaction(payload) {
   try {
     const database = client.db("aiacard-sandbox-db");
     const collection = database.collection("aiacard-sandox-col");
+    const notificationsCollection = database.collection("notifications");
     let user = null;
 
     // Use different user lookup depending on the transaction type.
@@ -824,6 +825,9 @@ async function processCardTransaction(payload) {
       }
     }
 
+    // Prepare a variable for notification data.
+    let notificationData = null;
+
     // Process the transaction based on type.
     if (type === 'create') {
       // Update the user's record for a new card creation.
@@ -831,7 +835,7 @@ async function processCardTransaction(payload) {
       const newCardIndex = activeCards + 1;
       const cardFieldName = `cardNo${newCardIndex}`;
 
-      // Clear only orderNo, leaving merchantOrderNo intact for future deposit updates.
+      // Update: clear orderNo but keep merchantOrderNo for deposit updates.
       const updateResult = await collection.updateOne(
         { _id: user._id },
         {
@@ -863,7 +867,7 @@ async function processCardTransaction(payload) {
           console.warn("User email not available for calling card-details endpoint; using fallback masked card number.");
         }
 
-        const notificationData = {
+        notificationData = {
           title: "Card Activation",
           desc: `Your new card ending ${maskedCardNumber} has been successfully created and activated. Happy spending!`,
           notifyTime: new Date(),
@@ -903,7 +907,7 @@ async function processCardTransaction(payload) {
 
       if (updateResult.modifiedCount > 0) {
         console.log(`(Notification) Deposit updated for merchantOrderNo: ${merchantOrderNo}`);
-        const notificationData = {
+        notificationData = {
           title: "Deposit Update",
           desc: `Your deposit for merchant order ${merchantOrderNo} has been updated successfully.`,
           notifyTime: new Date(),
@@ -917,6 +921,16 @@ async function processCardTransaction(payload) {
       } else {
         console.error(`Failed to update deposit record for merchantOrderNo: ${merchantOrderNo}`);
       }
+    }
+
+    // Insert the notification into the notifications collection for in-app display.
+    if (notificationData) {
+      await notificationsCollection.insertOne({
+        ...notificationData,
+        read: false,
+        createdAt: new Date()
+      });
+      console.log("Notification record inserted into notifications collection.");
     }
   } catch (error) {
     console.error('Error processing card transaction notification:', error);
