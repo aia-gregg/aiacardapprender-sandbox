@@ -1232,6 +1232,16 @@ app.post('/top-up', async (req, res) => {
     console.log('Wasabi deposit API response:', data);
 
     if (data.success && data.data && data.data.status === 'processing') {
+      // Format the transaction time received from Wasabi API
+      const transTimeDate = new Date(data.data.transactionTime);
+      const day = String(transTimeDate.getDate()).padStart(2, '0');
+      const month = String(transTimeDate.getMonth() + 1).padStart(2, '0');
+      const year = transTimeDate.getFullYear();
+      const hours = String(transTimeDate.getHours()).padStart(2, '0');
+      const minutes = String(transTimeDate.getMinutes()).padStart(2, '0');
+      const seconds = String(transTimeDate.getSeconds()).padStart(2, '0');
+      const formattedTransactionTime = `${day}-${month}-${year}, ${hours}:${minutes}:${seconds}`;
+
       // Build the topup record using new DB details.
       const topupRecord = {
         merchantOrderNo,
@@ -1240,7 +1250,8 @@ app.post('/top-up', async (req, res) => {
         orderNo: data.data.orderNo,
         status: data.data.status,
         remark: data.data.remark,
-        transactionTime: new Date(data.data.transactionTime),
+        // Save the formatted time instead of a raw Date
+        transactionTime: formattedTransactionTime,
         details: data.data,
         chosenCrypto, // Store the chosen crypto details (name, network, display)
         createdAt: new Date(),
