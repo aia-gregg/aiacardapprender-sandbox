@@ -781,9 +781,8 @@ async function processCardTransaction(payload) {
       return;
     }
   } else if (type === 'deposit') {
-    // Now deposit validation checks for orderNo instead of merchantOrderNo.
-    if (!orderNo || !cardNo) {
-      console.error('Missing orderNo or cardNo in deposit payload.');
+    if (!merchantOrderNo || !cardNo) {
+      console.error('Missing merchantOrderNo or cardNo in deposit payload.');
       return;
     }
   } else {
@@ -796,30 +795,39 @@ async function processCardTransaction(payload) {
     const collection = database.collection("aiacard-sandox-col");
     let user = null;
 
-    // For both create and deposit, lookup by orderNo.
-    user = await collection.findOne({ orderNo });
-    if (!user) {
-      console.error(`No user found with orderNo: ${orderNo}`);
-      return;
+    // Use different user lookup depending on the transaction type.
+    if (type === 'create') {
+      user = await collection.findOne({ orderNo });
+      if (!user) {
+        console.error(`No user found with orderNo: ${orderNo}`);
+        return;
+      }
+    } else if (type === 'deposit') {
+      user = await collection.findOne({ merchantOrderNo });
+      if (!user) {
+        console.error(`No user found with merchantOrderNo: ${merchantOrderNo}`);
+        return;
+      }
     }
 
+    // Process transaction based on type.
     if (type === 'create') {
-      // Process card creation.
+      // Update the user's record for card creation.
       const activeCards = user.activeCards || 0;
       const newCardIndex = activeCards + 1;
       const cardFieldName = `cardNo${newCardIndex}`;
-      
-      // Update: clear orderNo but (in your original design) keep merchantOrderNo.
+
+      // Update: clear orderNo but keep merchantOrderNo for deposit updates.
       const updateResult = await collection.updateOne(
         { _id: user._id },
         {
-          $set: { [cardFieldName]: cardNo, }, // orderNo: "" 
+          $set: { [cardFieldName]: cardNo, orderNo: "" },
           $inc: { activeCards: 1 },
         }
       );
-      
+
       console.log("UpdateResult for card creation:", updateResult);
-      
+
       if (updateResult.modifiedCount > 0) {
         console.log(`(Notification) User ${user.email} updated: ${cardFieldName} set to ${cardNo}. Active cards: ${newCardIndex}`);
         
@@ -842,19 +850,19 @@ async function processCardTransaction(payload) {
         } else {
           console.warn("User email not available for calling card-details endpoint; using fallback masked card number.");
         }
-        
+
         const notificationData = {
           title: "Card Activation",
           desc: `Your new card ending ${maskedCardNumber} has been successfully created and activated. Happy spending!`,
           notifyTime: new Date(),
           userNotify: user.holderId
         };
-        
+
         // Insert the notification into the notifications collection first.
         console.log("Card activation notification data before insertion:", notificationData);
         await insertNotification(notificationData);
         console.log("Card activation notification stored for user:", notificationData);
-        
+
         // Then send push notifications using available tokens.
         if (user.fcmToken || user.expoPushToken) {
           await sendPushNotification(user.fcmToken || user.expoPushToken, notificationData);
@@ -878,36 +886,38 @@ async function processCardTransaction(payload) {
         console.error('(Notification) Failed to update user record for card creation.');
       }
     } else if (type === 'deposit') {
-      // Process deposit using orderNo.
+      // Update deposit-related fields for the user record and clear merchantOrderNo after updating.
       const updateResult = await collection.updateOne(
         { _id: user._id },
         {
-          $set: { depositStatus: status, orderNo: "" },
+          $set: { depositStatus: status, merchantOrderNo: "" },
         }
       );
-      
+
       console.log("UpdateResult for deposit update:", updateResult);
-      
+
       if (updateResult.modifiedCount > 0) {
-        console.log(`(Notification) Deposit updated for orderNo: ${orderNo}`);
+        console.log(`(Notification) Deposit updated for merchantOrderNo: ${merchantOrderNo}`);
         const notificationData = {
           title: "Deposit Update",
-          desc: `Your deposit for order ${orderNo} has been updated successfully.`,
+          desc: `Your deposit for merchant order ${merchantOrderNo} has been updated successfully.`,
           notifyTime: new Date(),
           userNotify: user.holderId
         };
-        
+
+        // Insert the deposit notification into the notifications collection first.
         console.log("Deposit notification data before insertion:", notificationData);
         await insertNotification(notificationData);
-        console.log("Deposit notification stored for orderNo:", notificationData);
-        
+        console.log("Deposit notification stored for merchantOrderNo:", notificationData);
+
+        // Then send push notifications.
         if (user.fcmToken || user.expoPushToken) {
           await sendPushNotification(user.fcmToken || user.expoPushToken, notificationData);
         } else {
           console.warn(`No push token found for user ${user.email} during deposit update.`);
         }
       } else {
-        console.error(`Failed to update deposit record for orderNo: ${orderNo}`);
+        console.error(`Failed to update deposit record for merchantOrderNo: ${merchantOrderNo}`);
       }
     }
   } catch (error) {
