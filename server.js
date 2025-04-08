@@ -979,12 +979,12 @@ async function processCardFeePatch(payload) {
 // Helper function to process Topup (Deposit) notifications
 // Updated helper function to process Topup (Deposit) notifications
 async function processTopupNotification(payload) {
-  // Destructure the required fields from the payload.
-  const { orderNo, merchantOrderNo, amount, status, holderId } = payload;
+  // Destructure only the fields we care about
+  const { orderNo, merchantOrderNo, amount, status } = payload;
 
-  // Validate that orderNo, merchantOrderNo, and holderId are provided.
-  if (!orderNo || !merchantOrderNo || !holderId) {
-    console.error('Missing orderNo, merchantOrderNo, or holderId in topup payload.');
+  // Validate that orderNo and merchantOrderNo are provided.
+  if (!orderNo || !merchantOrderNo) {
+    console.error('Missing orderNo or merchantOrderNo in topup payload.');
     return;
   }
 
@@ -995,12 +995,30 @@ async function processTopupNotification(payload) {
   }
 
   try {
-    // Look up the user from your database using the provided holderId.
+    // Look up the deposit record from the topup collection using merchantOrderNo.
+    const depositRecord = await client.db("aiacard-sandbox-topup")
+      .collection("aiacard-sandtopup-col")
+      .findOne({ merchantOrderNo });
+      
+    if (!depositRecord) {
+      console.error(`No deposit record found for merchantOrderNo: ${merchantOrderNo}`);
+      return;
+    }
+    
+    // Use the holderId from the deposit record.
+    const lookupHolderId = depositRecord.holderId;
+    if (!lookupHolderId) {
+      console.error(`Deposit record for merchantOrderNo: ${merchantOrderNo} is missing holderId.`);
+      return;
+    }
+    
+    // Now, look up the user from your database using lookupHolderId.
     const database = client.db("aiacard-sandbox-db");
     const usersCollection = database.collection("aiacard-sandox-col");
-    const user = await usersCollection.findOne({ holderId });
+    const user = await usersCollection.findOne({ holderId: lookupHolderId });
+    
     if (!user) {
-      console.error(`No user found with holderId: ${holderId}`);
+      console.error(`No user found for holderId: ${lookupHolderId}`);
       return;
     }
 
@@ -1009,14 +1027,14 @@ async function processTopupNotification(payload) {
       title: "Topup Successful",
       desc: `Your topup of $${amount} for order ${merchantOrderNo} has been successfully processed.`,
       notifyTime: new Date(),
-      userNotify: holderId,
+      userNotify: lookupHolderId,
     };
 
     // Insert the notification into the notifications collection.
     await insertNotification(notificationData);
-    console.log(`(Notification) Topup notification stored for holderId: ${holderId}`, notificationData);
+    console.log(`(Notification) Topup notification stored for merchantOrderNo: ${merchantOrderNo}`, notificationData);
 
-    // Send push notifications.
+    // Send push notifications using the user's push tokens.
     let tokensSent = false;
     if (user.fcmTokens && Array.isArray(user.fcmTokens) && user.fcmTokens.length > 0) {
       for (const token of user.fcmTokens) {
@@ -1045,6 +1063,7 @@ async function processTopupNotification(payload) {
     console.error('Error processing topup notification:', error);
   }
 }
+
 
 
 
