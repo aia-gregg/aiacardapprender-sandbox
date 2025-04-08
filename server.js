@@ -747,28 +747,28 @@ app.post('/get-topups', async (req, res) => {
   try {
     const { pageNum = 1, pageSize = 15, cardNo, startTime, endTime } = req.body;
 
-    // Validate that cardNo is provided
     if (!cardNo) {
       return res.status(400).json({ success: false, message: "cardNo is required" });
     }
 
-    // Build the query object with filtering criteria
+    // Build the query object.
     const query = { cardNo };
     if (startTime && endTime) {
+      // startTime and endTime should be numeric values (Unix timestamps)
       query.transactionTime = {
         $gte: Number(startTime),
         $lte: Number(endTime)
       };
     }
 
-    // Connect to the topup database and collection
+    // Connect to the database.
     const db = client.db("aiacard-sandbox-topup");
     const collection = db.collection("aiacard-sandtopup-col");
 
-    // Count total matching documents for pagination
+    // Count documents for pagination.
     const total = await collection.countDocuments(query);
 
-    // Retrieve the records sorted by transactionTime in descending order
+    // Retrieve and sort records by transactionTime (most recent first).
     const records = await collection.find(query)
       .sort({ transactionTime: -1 })
       .skip((pageNum - 1) * pageSize)
@@ -784,6 +784,7 @@ app.post('/get-topups', async (req, res) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 });
+
 
 
 // Helper function to process Card Transaction notifications
@@ -1209,6 +1210,7 @@ app.post('/top-up', async (req, res) => {
   console.log('Received /top-up request with payload:', req.body);
   const { cardNo, merchantOrderNo, amount, holderId, chosenCrypto } = req.body;
 
+  // Validate required fields.
   if (!cardNo || !merchantOrderNo || !amount) {
     console.error("Validation error: Missing required fields", req.body);
     return res.status(400).json({
@@ -1221,8 +1223,8 @@ app.post('/top-up', async (req, res) => {
     cardNo,
     merchantOrderNo,
     amount,
-    currency: "USD", // or set as needed
-    holderId  // optional field
+    currency: "USD", // Adjust as necessary.
+    holderId  // Optional field.
   };
 
   console.log('Sending deposit payload to Wasabi:', depositPayload);
@@ -1232,17 +1234,10 @@ app.post('/top-up', async (req, res) => {
     console.log('Wasabi deposit API response:', data);
 
     if (data.success && data.data && data.data.status === 'processing') {
-      // Format the transaction time received from Wasabi API
-      const transTimeDate = new Date(data.data.transactionTime);
-      const day = String(transTimeDate.getDate()).padStart(2, '0');
-      const month = String(transTimeDate.getMonth() + 1).padStart(2, '0');
-      const year = transTimeDate.getFullYear();
-      const hours = String(transTimeDate.getHours()).padStart(2, '0');
-      const minutes = String(transTimeDate.getMinutes()).padStart(2, '0');
-      const seconds = String(transTimeDate.getSeconds()).padStart(2, '0');
-      const formattedTransactionTime = `${day}-${month}-${year}, ${hours}:${minutes}:${seconds}`;
+      // Store the original transaction time (as returned by Wasabi)
+      const originalTransactionTime = data.data.transactionTime;
 
-      // Build the topup record using new DB details.
+      // Build the topup record without converting the transaction time.
       const topupRecord = {
         merchantOrderNo,
         cardNo,
@@ -1250,12 +1245,11 @@ app.post('/top-up', async (req, res) => {
         orderNo: data.data.orderNo,
         status: data.data.status,
         remark: data.data.remark,
-        // Save the formatted time instead of a raw Date
-        transactionTime: formattedTransactionTime,
+        transactionTime: originalTransactionTime, // Save as-is.
         details: data.data,
-        chosenCrypto, // Store the chosen crypto details (name, network, display)
+        chosenCrypto,  // Includes details like name, network, display.
         createdAt: new Date(),
-        holderId  // meta field for cross–referencing
+        holderId
       };
 
       console.log('Inserting topup record into MongoDB:', topupRecord);
@@ -1263,7 +1257,6 @@ app.post('/top-up', async (req, res) => {
       const dbName = "aiacard-sandbox-topup";
       const collectionName = "aiacard-sandtopup-col";
       const insertResult = await client.db(dbName).collection(collectionName).insertOne(topupRecord);
-
       console.log('MongoDB insertion result:', insertResult);
 
       return res.status(200).json({ success: true, data });
@@ -1286,42 +1279,43 @@ app.post('/top-up', async (req, res) => {
 });
 
 
+
 // GET endpoint to fetch updated topup record based on orderNo and holderId
-app.get('/top-up-status', async (req, res) => {
-  const orderNo = req.query.orderNo;
-  const holderId = req.query.holderId;
+// app.get('/top-up-status', async (req, res) => {
+//   const orderNo = req.query.orderNo;
+//   const holderId = req.query.holderId;
 
-  if (!orderNo || !holderId) {
-    console.error('Validation error: Missing required query parameters: orderNo and holderId');
-    return res.status(400).json({
-      success: false,
-      message: 'Missing required query parameters: orderNo and holderId.'
-    });
-  }
+//   if (!orderNo || !holderId) {
+//     console.error('Validation error: Missing required query parameters: orderNo and holderId');
+//     return res.status(400).json({
+//       success: false,
+//       message: 'Missing required query parameters: orderNo and holderId.'
+//     });
+//   }
 
-  console.log(`Fetching topup record for orderNo: ${orderNo} and holderId: ${holderId}`);
+//   console.log(`Fetching topup record for orderNo: ${orderNo} and holderId: ${holderId}`);
 
-  try {
-    const dbName = "aiacard-sandbox-topup";
-    const collectionName = "aiacard-sandtopup-col";
-    const topupRecord = await client.db(dbName).collection(collectionName)
-      .findOne({ orderNo: orderNo, holderId: holderId });
+//   try {
+//     const dbName = "aiacard-sandbox-topup";
+//     const collectionName = "aiacard-sandtopup-col";
+//     const topupRecord = await client.db(dbName).collection(collectionName)
+//       .findOne({ orderNo: orderNo, holderId: holderId });
 
-    if (!topupRecord) {
-      console.error(`No topup record found for orderNo: ${orderNo} and holderId: ${holderId}`);
-      return res.status(404).json({ success: false, message: 'Topup record not found.' });
-    }
+//     if (!topupRecord) {
+//       console.error(`No topup record found for orderNo: ${orderNo} and holderId: ${holderId}`);
+//       return res.status(404).json({ success: false, message: 'Topup record not found.' });
+//     }
 
-    return res.status(200).json({ success: true, data: topupRecord });
-  } catch (error) {
-    console.error('Error in GET /top-up-status endpoint:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Internal server error',
-      error: error.message
-    });
-  }
-});
+//     return res.status(200).json({ success: true, data: topupRecord });
+//   } catch (error) {
+//     console.error('Error in GET /top-up-status endpoint:', error);
+//     return res.status(500).json({
+//       success: false,
+//       message: 'Internal server error',
+//       error: error.message
+//     });
+//   }
+// });
 
 // Freeze endpoint with dynamic Wasabi API call
 app.post('/merchant/core/mcb/card/freeze', async (req, res) => {
