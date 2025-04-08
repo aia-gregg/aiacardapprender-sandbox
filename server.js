@@ -85,14 +85,6 @@ client.connect()
   .then(() => console.log("✅ Connected to MongoDB"))
   .catch((err) => console.error("❌ Error connecting to MongoDB:", err));
 
-// client.connect()
-//   .then(() => {
-//     console.log("✅ Connected to MongoDB");
-//     // Call seedData on server start
-//     seedWasabiData();
-//   })
-//   .catch((err) => console.error("❌ Error connecting to MongoDB:", err));
-
   async function decryptUsingMicroservice(encryptedData) {
     if (!encryptedData) return null;
     try {
@@ -109,21 +101,6 @@ client.connect()
       return null;
     }
   }
-  
-// Connect to MongoDB (ensure process.env.MONGODB_URI is set in your environment)
-// mongoose.connect(process.env.MONGODB_URI)
-
-// Define the user schema and model.
-// const userSchema = new mongoose.Schema({
-//   email: { type: String, required: true, unique: true },
-//   totpSecret: { type: String },
-//   twoFAEnabled: { type: Boolean, default: false },
-//   isGAVerified: { type: Boolean, default: false },  // Ensure this is included
-//   biometricsEnabled: { type: Boolean, default: false },
-//   // ...other fields
-// });
-
-// const User = mongoose.model('User', userSchema);
 
 /**
  * GET /api/generate-2fa?email=<user-email>
@@ -164,14 +141,6 @@ app.get('/api/generate-2fa', async (req, res) => {
     res.status(500).json({ error: 'Internal server error', details: error.message });
   }
 });
-
-/**
- * POST /api/verify-2fa
- *
- * Request body should include: { email: string, otp: string }
- * Verifies the OTP code using the stored secret in MongoDB.
- * If valid, marks the user's 2FA as enabled.
- */
 
 app.post('/api/verify-2fa', async (req, res) => {
   const { email, otp } = req.body;
@@ -587,29 +556,8 @@ app.post('/send-notification', async (req, res) => {
   }
 });
 
-// // Assuming you have Socket.IO set up
-// const http = require('http').createServer(app);
-// const io = require('socket.io')(http);
-
-// Placeholder functions for sending email and push notifications
-// async function sendTopupEmail(to, subject, body) {
-//   console.log(`Sending email to ${to}: ${subject}\n${body}`);
-//   // await emailService.send({ to, subject, body });
-// }
-
-// async function sendPushNotification(userId, message) {
-//   console.log(`Sending push notification to user ${userId}: ${message}`);
-//   // await pushService.send({ userId, message });
-// }
-
 // Webhook endpoint
-app.post(
-  '/webhook',
-  express.json({
-    verify: (req, res, buf) => {
-      req.rawBody = buf.toString();
-    },
-  }),
+app.post('/webhook', express.json({verify: (req, res, buf) => {req.rawBody = buf.toString(); }, }),
   async (req, res) => {
     // Immediately acknowledge the webhook.
     const responsePayload = {
@@ -807,9 +755,6 @@ app.post('/get-topups', async (req, res) => {
   }
 });
 
-
-
-
 // Helper function to process Card Transaction notifications
 async function processCardTransaction(payload) {
   const { orderNo, cardNo, type } = payload;
@@ -912,7 +857,6 @@ async function getMaskedCardNumber(cardNo, holderId) {
     return null;
   }
 }
-
 
 // Helper function to process Card Authorization Transaction notifications
 async function processCardAuthTransaction(payload) {
@@ -1084,9 +1028,6 @@ async function processTopupNotification(payload) {
     console.error('Error processing topup notification:', error);
   }
 }
-
-
-
 
 // New endpoint to fetch notifications from the dedicated notifications database/collection
 app.get('/notifications', async (req, res) => {
@@ -1273,7 +1214,6 @@ app.post('/get-active-cards', async (req, res) => {
 });
 
 // New Topup/Deposit Endpoint
-// New Topup/Deposit Endpoint
 app.post('/top-up', async (req, res) => {
   console.log('Received /top-up request with payload:', req.body);
   const { cardNo, merchantOrderNo, amount, holderId, chosenCrypto } = req.body;
@@ -1345,8 +1285,6 @@ app.post('/top-up', async (req, res) => {
     });
   }
 });
-
-
 
 // GET endpoint to fetch updated topup record based on orderNo and holderId
 // app.get('/top-up-status', async (req, res) => {
