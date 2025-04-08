@@ -892,6 +892,28 @@ async function insertNotification(notificationData) {
   }
 }
 
+// helper to find maskedcardnumber
+async function getMaskedCardNumber(cardNo, holderId) {
+  try {
+    const db = client.db("aiacard-sandbox-db");
+    // Query for the card details using both cardNo and holderId.
+    let cardDetail = await db.collection("cards").findOne({ cardNo, holderId });
+    if (!cardDetail) {
+      return null;
+    }
+    // If maskedCardNumber is not defined or is empty,
+    // generate it as "**** " + last 4 digits of the cardNo.
+    if (!cardDetail.maskedCardNumber || cardDetail.maskedCardNumber.trim() === "") {
+      cardDetail.maskedCardNumber = "**** " + cardNo.slice(-4);
+    }
+    return cardDetail;
+  } catch (error) {
+    console.error("Error fetching card detail:", error);
+    return null;
+  }
+}
+
+
 // Helper function to process Card Authorization Transaction notifications
 async function processCardAuthTransaction(payload) {
   const { cardNo, merchantName, amount } = payload;
@@ -909,7 +931,7 @@ async function processCardAuthTransaction(payload) {
     const maskedCardNo = "**** " + cardNo.slice(-4);
     const notificationData = {
       title: "Transaction",
-      desc: `Authorization transaction for ${amount} from card ending ${maskedCardNo} has been processed at ${merchantName}.`,
+      desc: `Authorization transaction for ${amount} from card ending ${cardDetail.maskedCardNumber} has been processed at ${merchantName}.`,
       notifyTime: new Date(),
       userNotify: payload.holderId || "All"
     };
@@ -952,7 +974,7 @@ async function processCardFeePatch(payload) {
     const maskedCardNo = "**** " + cardNo.slice(-4);
     const notificationData = {
       title: "Transaction Reversal",
-      desc: `Reversal processed for ${currency} ${amount} for card ending ${maskedCardNo}.`,
+      desc: `Reversal processed for ${currency} ${amount} for card ending ${cardDetail.maskedCardNumber}.`,
       notifyTime: new Date(),
       userNotify: payload.holderId || "All"
     };
@@ -1023,10 +1045,9 @@ async function processTopupNotification(payload) {
     }
 
     // Build the notification payload.
-    const maskedCardNo = user.maskedCardNumber || "****";
     const notificationData = {
       title: "Topup Successful",
-      desc: `Your topup of $${amount} for card ending ${maskedCardNo} has been successfully completed.`,
+      desc: `Your topup of $${amount} for card ending ${cardDetail.maskedCardNumber} has been successfully completed.`,
       notifyTime: new Date(),
       userNotify: lookupHolderId,
     };
@@ -1054,8 +1075,7 @@ async function processTopupNotification(payload) {
     // Optionally, send an email notification.
     if (user.email) {
       const emailSubject = 'Topup Successful';
-      const maskedCardNo = user.maskedCardNumber || "****";
-      const emailBody = `Your topup of $${amount} for card ending ${maskedCardNo} has been successfully completed.`;
+      const emailBody = `Your topup of $${amount} for card ending ${cardDetail.maskedCardNumber} has been successfully completed.`;
       await sendTopupEmail(user.email, emailSubject, emailBody);
     } else {
       console.warn('User email not provided; skipping email notification.');
