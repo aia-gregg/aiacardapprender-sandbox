@@ -844,7 +844,7 @@ async function processCardTransaction(payload) {
 
       if (updateResult.modifiedCount > 0) {
         console.log(`(Notification) User ${user.email} updated: ${cardFieldName} set to ${cardNo}. Active cards: ${newCardIndex}`);
-
+        
         // Retrieve full card details via the card-details endpoint.
         let maskedCardNumber = "**** " + cardNo.slice(-4);
         if (user.email) {
@@ -872,7 +872,12 @@ async function processCardTransaction(payload) {
           userNotify: user.holderId
         };
 
-        // Send push notifications using available tokens.
+        // Insert the notification into the notifications collection first.
+        console.log("Card activation notification data before insertion:", notificationData);
+        await insertNotification(notificationData);
+        console.log("Card activation notification stored for user:", notificationData);
+
+        // Then send push notifications using available tokens.
         if (user.fcmToken || user.expoPushToken) {
           await sendPushNotification(user.fcmToken || user.expoPushToken, notificationData);
         } else {
@@ -891,9 +896,6 @@ async function processCardTransaction(payload) {
             console.warn(`No push token found for user ${user.email}`);
           }
         }
-        
-        // Insert the notification into the notifications collection for in-app display.
-        await insertNotification(notificationData);
       } else {
         console.error('(Notification) Failed to update user record for card creation.');
       }
@@ -917,20 +919,36 @@ async function processCardTransaction(payload) {
           userNotify: user.holderId
         };
 
+        // Insert the deposit notification into the notifications collection first.
+        console.log("Deposit notification data before insertion:", notificationData);
+        await insertNotification(notificationData);
+        console.log("Deposit notification stored for merchantOrderNo:", notificationData);
+
+        // Then send push notifications.
         if (user.fcmToken || user.expoPushToken) {
           await sendPushNotification(user.fcmToken || user.expoPushToken, notificationData);
         } else {
           console.warn(`No push token found for user ${user.email} during deposit update.`);
         }
-        
-        // Insert the deposit notification into the notifications collection.
-        await insertNotification(notificationData);
       } else {
         console.error(`Failed to update deposit record for merchantOrderNo: ${merchantOrderNo}`);
       }
     }
   } catch (error) {
     console.error('Error processing card transaction notification:', error);
+  }
+}
+
+// Helper function to insert a notification document into the notifications collection.
+async function insertNotification(notificationData) {
+  try {
+    const notificationsDb = client.db("aiacard-sandbox-notify");
+    const notificationsCollection = notificationsDb.collection("aiacard-sandnotify-col");
+    const result = await notificationsCollection.insertOne(notificationData);
+    console.log("Notification inserted into DB with result:", result);
+  } catch (error) {
+    console.error("Error inserting notification:", error);
+    throw error;
   }
 }
 
