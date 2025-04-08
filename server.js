@@ -562,9 +562,9 @@ app.post('/send-notification', async (req, res) => {
   }
 });
 
-// Assuming you have Socket.IO set up
-const http = require('http').createServer(app);
-const io = require('socket.io')(http);
+// // Assuming you have Socket.IO set up
+// const http = require('http').createServer(app);
+// const io = require('socket.io')(http);
 
 // Placeholder functions for sending email and push notifications
 // async function sendTopupEmail(to, subject, body) {
@@ -620,13 +620,16 @@ app.post(
         // Destructure fields from the webhook payload.
         const { merchantOrderNo, orderNo, status, type, cardNo, userEmail, holderId } = req.body;
 
-        // Process deposit update if merchantOrderNo and status are provided and type is "deposit".
+        // For deposit-related webhooks: Only process if type is "deposit".
         if (merchantOrderNo && status && type === 'deposit') {
+          if (status !== 'success') {
+            console.log(`Deposit webhook received status "${status}". Waiting for success event to update record.`);
+            return;
+          }
           console.log('Processing deposit update webhook for merchantOrderNo:', merchantOrderNo);
 
-          // Ensure holderId is available since it must match the meta field.
-          const metaValue = req.body.holderId;
-          if (!metaValue) {
+          // Ensure holderId is available.
+          if (!holderId) {
             console.error("No holderId provided in deposit webhook payload; cannot update time-series deposit record.");
             return;
           }
@@ -637,47 +640,31 @@ app.post(
           const depositDB = client.db(dbName);
           const depositCollection = depositDB.collection(collectionName);
 
-          // Use updateMany instead of updateOne since time-series collections require a multi update
-          // when querying on a field that is not the meta field.
+          // Update deposit record using updateMany.
           const updateResult = await depositCollection.updateMany(
-            { merchantOrderNo, holderId: metaValue },
+            { merchantOrderNo, holderId: holderId },
             { $set: { status, orderNo, updatedAt: new Date() } }
           );
 
           if (updateResult.modifiedCount > 0) {
             console.log(`Deposit record updated for merchantOrderNo: ${merchantOrderNo} with status: ${status}`);
 
-            // Build a notification payload for deposit notifications.
-            const notificationPayload = {
-              title: "Topup Successful",
-              desc: `Your topup with order ${merchantOrderNo} is now ${status}.`,
-              notifyTime: new Date(),
-              userNotify: metaValue || userEmail || "All"
+            // Now delegate processing of notifications to the helper function.
+            const topupPayload = {
+              orderNo,             // Updated orderNo returned from Wasabi
+              merchantOrderNo,
+              amount: req.body.amount, // or extract amount from req.body if available
+              status,
+              holderId,
             };
-
-            // Insert the notification into the notifications collection.
-            await insertNotification(notificationPayload);
-            console.log("Deposit notification stored:", notificationPayload);
-
-            // Send an email on successful topup.
-            if (userEmail) {
-              const emailSubject = 'Topup Successful';
-              const emailBody = `Your topup with order ${merchantOrderNo} has been updated to status: ${status}.`;
-              await sendTopupEmail(userEmail, emailSubject, emailBody);
-            } else {
-              console.warn('User email not provided; skipping email notification.');
-            }
-
-            // Send a push notification if holderId is provided.
-            const pushMessage = `Your topup (order ${merchantOrderNo}) is now ${status}.`;
-            await sendPushNotification(metaValue, pushMessage);
+            await processTopupNotification(topupPayload);
           } else {
             console.error(`Failed to update deposit record for merchantOrderNo: ${merchantOrderNo}`);
           }
-          return;
+          return; // Exit after processing deposit update.
         }
 
-        // Check for a notification category header and process accordingly (for non-deposit payloads).
+        // Process non-deposit notifications based on a header "x-wsb-category".
         const category = req.headers['x-wsb-category'];
         if (category) {
           console.log('Notification category:', category);
@@ -700,15 +687,14 @@ app.post(
             default:
               console.warn('Unhandled notification category:', category);
           }
-          return; // Exit processing after handling the category.
+          return; // Exit after handling category.
         }
 
-        // Fallback processing for card activation (or similar) webhook.
+        // Fallback processing for card activation (or similar) webhooks.
         if (!orderNo || !cardNo) {
           console.error('Missing orderNo or cardNo in webhook payload.');
           return;
         }
-        // Only process further if type is 'create' (for card activations).
         if (type !== 'create') {
           console.log(`Webhook type is ${type} (expected 'create' or 'deposit'). Skipping fallback processing.`);
           return;
@@ -717,20 +703,15 @@ app.post(
         // Process card activation update.
         const database = client.db('aiacard-sandbox-db');
         const collection = database.collection('aiacard-sandox-col');
-
-        // Find the user by orderNo (ensure this field is indexed).
         const user = await collection.findOne({ orderNo });
         if (!user) {
           console.error(`No user found with orderNo: ${orderNo}`);
           return;
         }
-
-        // Calculate the new card index and field name for the user record.
         const activeCards = user.activeCards || 0;
         const newCardIndex = activeCards + 1;
         const cardFieldName = `cardNo${newCardIndex}`;
 
-        // Update the user record concurrently with other operations.
         const updateResult2 = await collection.updateOne(
           { _id: user._id },
           {
@@ -921,21 +902,21 @@ async function processCardFeePatch(payload) {
 // Helper function to process Topup (Deposit) notifications
 async function processTopupNotification(payload) {
   const { orderNo, merchantOrderNo, amount, status, holderId } = payload;
-  
-  // Validate required fields
+
+  // Validate required fields.
   if (!orderNo || !merchantOrderNo || !holderId) {
     console.error('Missing orderNo, merchantOrderNo, or holderId in topup payload.');
     return;
   }
-  
-  // Only process notifications for successful topups
+
+  // Only process notifications for successful topups.
   if (status !== 'success') {
     console.log(`Topup status is ${status}. No notification triggered for non-successful status.`);
     return;
   }
-  
+
   try {
-    // Fetch the user from the database using the holderId
+    // Fetch the user from the database using the holderId.
     const database = client.db("aiacard-sandbox-db");
     const usersCollection = database.collection("aiacard-sandox-col");
     const user = await usersCollection.findOne({ holderId });
@@ -943,7 +924,7 @@ async function processTopupNotification(payload) {
       console.error(`No user found with holderId: ${holderId}`);
       return;
     }
-    
+
     // Build the notification payload for a successful topup.
     const notificationData = {
       title: "Topup Successful",
@@ -951,12 +932,12 @@ async function processTopupNotification(payload) {
       notifyTime: new Date(),
       userNotify: holderId,
     };
-    
+
     // Insert the notification into the notifications collection.
     await insertNotification(notificationData);
     console.log(`(Notification) Topup notification stored for holderId: ${holderId}`, notificationData);
-    
-    // Send push notifications using stored tokens.
+
+    // Send push notifications.
     let tokensSent = false;
     if (user.fcmTokens && Array.isArray(user.fcmTokens) && user.fcmTokens.length > 0) {
       for (const token of user.fcmTokens) {
@@ -971,16 +952,15 @@ async function processTopupNotification(payload) {
     if (!tokensSent) {
       console.warn(`No push token found for user ${user.email}`);
     }
-    
+
     // Optionally, send an email notification.
     if (user.email) {
       const emailSubject = 'Topup Successful';
-      const emailBody = `Your topup of $${amount} for card ending ${maskedCardNo} has been successfully completed. Happy spending!`;
+      const emailBody = `Your topup of $${amount} for card ending in ${user.maskedCardNumber || "****"} has been successfully completed.`;
       await sendTopupEmail(user.email, emailSubject, emailBody);
     } else {
       console.warn('User email not provided; skipping email notification.');
     }
-    
   } catch (error) {
     console.error('Error processing topup notification:', error);
   }
