@@ -899,7 +899,7 @@ async function processCardFeePatch(payload) {
 async function callCardDetailsEndpoint(email, cardNo) {
   try {
     // Adjust this function using your preferred HTTP client (e.g., fetch, axios)
-    const response = await fetch('/card-details', {
+    const response = await fetch('https://aiacardapprender-sandbox.onrender.com/card-details', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, cardNo }),
