@@ -24,18 +24,6 @@ const client = new MongoClient(uri, {
   }
 });
 
-app.get('/api/get-hmac-secret', verifyJWT, (req, res) => {
-  // The HMAC secret should be set in your environment variables.
-  const hmacSecret = process.env.HMAC_SECRET;
-  if (!hmacSecret) {
-    console.error('HMAC secret is not configured on the server.');
-    return res.status(500).json({ error: 'HMAC secret is not configured on the server.' });
-  }
-  // IMPORTANT: In production consider whether you want to return the raw key.
-  // For now we return the static key.
-  res.json({ hmacSecret });
-});
-
 function generateSignature(message, privateKey) {
   const signer = crypto.createSign('RSA-SHA256');
   signer.update(message);
@@ -65,6 +53,19 @@ const port = process.env.PORT || 3000;
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Define your protected HMAC key endpoint BEFORE any other routes that need "app"
+app.get('/api/get-hmac-secret', verifyJWT, (req, res) => {
+  // The HMAC secret is set as an environment variable. Ensure you have set HMAC_SECRET in your Render config.
+  const hmacSecret = process.env.HMAC_SECRET;
+  if (!hmacSecret) {
+    console.error('HMAC secret is not configured on the server.');
+    return res.status(500).json({ error: 'HMAC secret is not configured on the server.' });
+  }
+  // For now we return the static key (be sure to rotate it periodically)
+  res.json({ hmacSecret });
+});
+
 
 // Connect to MongoDB
 client.connect()
