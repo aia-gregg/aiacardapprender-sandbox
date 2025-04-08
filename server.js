@@ -977,9 +977,10 @@ async function processCardFeePatch(payload) {
 }
 
 // Helper function to process Topup (Deposit) notifications
+// Updated helper function to process Topup (Deposit) notifications
 async function processTopupNotification(payload) {
   const { orderNo, merchantOrderNo, amount, status, holderId } = payload;
-
+  
   // Validate required fields.
   if (!orderNo || !merchantOrderNo || !holderId) {
     console.error('Missing orderNo, merchantOrderNo, or holderId in topup payload.');
@@ -988,7 +989,7 @@ async function processTopupNotification(payload) {
 
   // Only process notifications for successful topups.
   if (status !== 'success') {
-    console.log(`Topup status is ${status}. No notification triggered for non-successful status.`);
+    console.log(`Topup status is ${status}. No notification triggered for non-successful topups.`);
     return;
   }
 
@@ -1002,7 +1003,8 @@ async function processTopupNotification(payload) {
       return;
     }
 
-    // Build the notification payload for a successful topup.
+    // Build the notification data.
+    // You can customize the message as needed; here we include the topup amount and order information.
     const notificationData = {
       title: "Topup Successful",
       desc: `Your topup of $${amount} for order ${merchantOrderNo} has been successfully processed.`,
@@ -1010,11 +1012,11 @@ async function processTopupNotification(payload) {
       userNotify: holderId,
     };
 
-    // Insert the notification into the notifications collection.
+    // Insert the notification document into your notifications collection.
     await insertNotification(notificationData);
-    console.log(`(Notification) Topup notification stored for holderId: ${holderId}`, notificationData);
+    console.log(`(Notification) Topup notification inserted for holderId: ${holderId}`, notificationData);
 
-    // Send push notifications.
+    // Send push notifications: try FCM tokens first, then Expo token.
     let tokensSent = false;
     if (user.fcmTokens && Array.isArray(user.fcmTokens) && user.fcmTokens.length > 0) {
       for (const token of user.fcmTokens) {
@@ -1029,19 +1031,11 @@ async function processTopupNotification(payload) {
     if (!tokensSent) {
       console.warn(`No push token found for user ${user.email}`);
     }
-
-    // Optionally, send an email notification.
-    if (user.email) {
-      const emailSubject = 'Topup Successful';
-      const emailBody = `Your topup of $${amount} for card ending in ${user.maskedCardNumber || "****"} has been successfully completed.`;
-      await sendTopupEmail(user.email, emailSubject, emailBody);
-    } else {
-      console.warn('User email not provided; skipping email notification.');
-    }
   } catch (error) {
     console.error('Error processing topup notification:', error);
   }
 }
+
 
 // New endpoint to fetch notifications from the dedicated notifications database/collection
 app.get('/notifications', async (req, res) => {
