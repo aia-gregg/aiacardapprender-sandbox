@@ -1198,7 +1198,7 @@ app.post('/top-up', async (req, res) => {
         transactionTime: new Date(data.data.transactionTime),
         details: data.data,
         createdAt: new Date(),
-        holderId: req.body.holderId || null  // include meta field for time-series collection
+        holderId: req.body.holderId  // include meta field for time-series collection
       };
 
       // Log the record before insertion.
