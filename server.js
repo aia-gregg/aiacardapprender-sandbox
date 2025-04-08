@@ -1,7 +1,3 @@
-// SECURITY MTLS
-const https = require('https');
-const fs = require('fs');
-// SECURITY MTLS END
 const express = require('express');
 const cors = require('cors');
 const bcryptjs = require('bcryptjs');
@@ -14,9 +10,9 @@ const stripe = require('stripe')('sk_test_51Qy1IkDO1xHmcck34QjJM47p4jkKFGViTuIVl
 const { merchantPrivateKey, callWasabiApi } = require('./wasabiApi');
 const fireblocks = require('./fireblocks');
 const admin = require('./firebaseadmin');
-// const http = require('http');
 const otplib = require('otplib');
-//const mongoose = require('mongoose');
+const verifyJWT = require('./jwtMiddleware');
+const verifyHMAC = require('./hmacMiddleware');
 
 // MongoDB Connection
 const uri = process.env.MONGODB_URI;
@@ -26,6 +22,18 @@ const client = new MongoClient(uri, {
     strict: true,
     deprecationErrors: true,
   }
+});
+
+app.get('/api/get-hmac-secret', verifyJWT, (req, res) => {
+  // The HMAC secret should be set in your environment variables.
+  const hmacSecret = process.env.HMAC_SECRET;
+  if (!hmacSecret) {
+    console.error('HMAC secret is not configured on the server.');
+    return res.status(500).json({ error: 'HMAC secret is not configured on the server.' });
+  }
+  // IMPORTANT: In production consider whether you want to return the raw key.
+  // For now we return the static key.
+  res.json({ hmacSecret });
 });
 
 function generateSignature(message, privateKey) {
@@ -54,32 +62,7 @@ const secretKey = "your_super_secret_key";
 const app = express();
 const port = process.env.PORT || 3000;
 
-// SECURITY MTLS
-const httpsOptions = {
-  key: fs.readFileSync(process.env.SERVER_KEY_PATH),
-  cert: fs.readFileSync(process.env.SERVER_CERT_PATH),
-  ca: fs.readFileSync(process.env.CA_CERT_PATH),
-  requestCert: true,          // Request a client certificate
-  rejectUnauthorized: true    // Reject unauthorized clients
-};
-// SECURITY MTLS END
-
 // Middleware
-// SECURITY MTLS
-app.use((req, res, next) => {
-  // Check if the client certificate was authorized.
-  if (!req.client.authorized) {
-    console.error('Client certificate was not authorized.');
-    return res.status(401).send('Client certificate required.');
-  }
-  // Optionally, log some client certificate details:
-  const cert = req.socket.getPeerCertificate();
-  if (cert && cert.subject) {
-    console.log('Client certificate subject:', cert.subject);
-  }
-  next();
-});
-// SECURITY MTLS END
 app.use(cors());
 app.use(express.json());
 
@@ -1396,11 +1379,10 @@ app.post('/get-active-cards', async (req, res) => {
 });
 
 // New Topup/Deposit Endpoint
-app.post('/top-up', async (req, res) => {
+app.post('/top-up', verifyJWT, verifyHMAC, async (req, res) => {
   console.log('Received /top-up request with payload:', req.body);
   const { cardNo, merchantOrderNo, amount, holderId, chosenCrypto } = req.body;
 
-  // Validate required fields.
   if (!cardNo || !merchantOrderNo || !amount) {
     console.error("Validation error: Missing required fields", req.body);
     return res.status(400).json({
@@ -2903,21 +2885,10 @@ app.post('/create-vault-account', async (req, res) => {
   }
 });
 
-// SECURITY MTLS (REPLACE BELOW)
-const server = https.createServer(httpsOptions, app);
-
-server.listen(port, '0.0.0.0', () => {
-  console.log(`🚀 mTLS-enabled Server running on port ${port}`);
+const server = app.listen(port, '0.0.0.0', () => {
+  console.log(`🚀 Server running on port ${port}`);
 });
-
 server.on('error', (err) => {
   console.error('Server error:', err);
 });
-
-// const server = app.listen(port, '0.0.0.0', () => {
-//   console.log(`🚀 Server running on port ${port}`);
-// });
-// server.on('error', (err) => {
-//   console.error('Server error:', err);
-// });
 
