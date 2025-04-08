@@ -755,20 +755,6 @@ app.post('/get-topups', async (req, res) => {
   }
 });
 
-
-
-// Helper function to insert a notification document into the notifications collection
-async function insertNotification(notificationData) {
-  try {
-    const notificationsDb = client.db("aiacard-sandbox-notify");
-    const notificationsCollection = notificationsDb.collection("aiacard-sandnotify-col");
-    await notificationsCollection.insertOne(notificationData);
-    console.log("Notification inserted:", notificationData);
-  } catch (error) {
-    console.error("Error inserting notification:", error);
-  }
-}
-
 // Updated helper function for calling the card-details endpoint
 async function callCardDetailsEndpoint(email, cardNo) {
   try {
@@ -786,17 +772,19 @@ async function callCardDetailsEndpoint(email, cardNo) {
 
 // Updated processCardTransaction function using the card-details endpoint
 async function processCardTransaction(payload) {
-  const { orderNo, merchantOrderNo, cardNo, type, status } = payload;
+  const { type, orderNo, cardNo } = payload;
 
-  // Validate required fields based on transaction type.
+  // If type is deposit, delegate to processTopupNotification and return.
+  if (type === 'deposit') {
+    console.log("Deposit type detected in processCardTransaction; delegating to processTopupNotification");
+    await processTopupNotification(payload);
+    return;
+  }
+
+  // Validate required fields for card creation.
   if (type === 'create') {
     if (!orderNo || !cardNo) {
       console.error('Missing orderNo or cardNo in card creation payload.');
-      return;
-    }
-  } else if (type === 'deposit') {
-    if (!merchantOrderNo || !cardNo) {
-      console.error('Missing merchantOrderNo or cardNo in deposit payload.');
       return;
     }
   } else {
@@ -807,135 +795,100 @@ async function processCardTransaction(payload) {
   try {
     const database = client.db("aiacard-sandbox-db");
     const collection = database.collection("aiacard-sandox-col");
-    let user = null;
-
-    // Use different user lookup depending on the transaction type.
-    if (type === 'create') {
-      user = await collection.findOne({ orderNo });
-      if (!user) {
-        console.error(`No user found with orderNo: ${orderNo}`);
-        return;
-      }
-    } else if (type === 'deposit') {
-      user = await collection.findOne({ merchantOrderNo });
-      if (!user) {
-        console.error(`No user found with merchantOrderNo: ${merchantOrderNo}`);
-        return;
-      }
+    let user = await collection.findOne({ orderNo });
+    if (!user) {
+      console.error(`No user found with orderNo: ${orderNo}`);
+      return;
     }
 
-    // Process transaction based on type.
-    if (type === 'create') {
-      // Update the user's record for card creation.
-      const activeCards = user.activeCards || 0;
-      const newCardIndex = activeCards + 1;
-      const cardFieldName = `cardNo${newCardIndex}`;
+    // Process card creation.
+    const activeCards = user.activeCards || 0;
+    const newCardIndex = activeCards + 1;
+    const cardFieldName = `cardNo${newCardIndex}`;
 
-      // Update: clear orderNo but keep merchantOrderNo for deposit updates.
-      const updateResult = await collection.updateOne(
-        { _id: user._id },
-        {
-          $set: { [cardFieldName]: cardNo, orderNo: "" },
-          $inc: { activeCards: 1 },
-        }
-      );
+    // Update: clear orderNo but keep merchantOrderNo for deposit updates.
+    const updateResult = await collection.updateOne(
+      { _id: user._id },
+      {
+        $set: { [cardFieldName]: cardNo, orderNo: "" },
+        $inc: { activeCards: 1 },
+      }
+    );
 
-      console.log("UpdateResult for card creation:", updateResult);
+    console.log("UpdateResult for card creation:", updateResult);
 
-      if (updateResult.modifiedCount > 0) {
-        console.log(`(Notification) User ${user.email} updated: ${cardFieldName} set to ${cardNo}. Active cards: ${newCardIndex}`);
-        
-        // Retrieve full card details via the card-details endpoint.
-        let maskedCardNumber = "**** " + cardNo.slice(-4);
-        if (user.email) {
-          try {
-            const cardDetailsResponse = await callCardDetailsEndpoint(user.email, cardNo);
-            if (cardDetailsResponse.success && cardDetailsResponse.data) {
-              const fullCardNumber = cardDetailsResponse.data.cardNumber;
-              if (fullCardNumber && fullCardNumber.length >= 4) {
-                maskedCardNumber = "**** " + fullCardNumber.slice(-4);
-              }
-            } else {
-              console.warn("Card-details endpoint did not return success; using fallback masked card number.");
+    if (updateResult.modifiedCount > 0) {
+      console.log(`(Notification) User ${user.email} updated: ${cardFieldName} set to ${cardNo}. Active cards: ${newCardIndex}`);
+
+      // Retrieve full card details via the card-details endpoint.
+      let maskedCardNumber = "**** " + cardNo.slice(-4);
+      if (user.email) {
+        try {
+          const cardDetailsResponse = await callCardDetailsEndpoint(user.email, cardNo);
+          if (cardDetailsResponse.success && cardDetailsResponse.data) {
+            const fullCardNumber = cardDetailsResponse.data.cardNumber;
+            if (fullCardNumber && fullCardNumber.length >= 4) {
+              maskedCardNumber = "**** " + fullCardNumber.slice(-4);
             }
-          } catch (err) {
-            console.error("Error retrieving card details via endpoint:", err);
+          } else {
+            console.warn("Card-details endpoint did not return success; using fallback masked card number.");
           }
-        } else {
-          console.warn("User email not available for calling card-details endpoint; using fallback masked card number.");
-        }
-
-        const notificationData = {
-          title: "Card Activation",
-          desc: `Your new card ending ${maskedCardNumber} has been successfully created and activated. Happy spending!`,
-          notifyTime: new Date(),
-          userNotify: user.holderId
-        };
-
-        // Insert the notification into the notifications collection first.
-        console.log("Card activation notification data before insertion:", notificationData);
-        await insertNotification(notificationData);
-        console.log("Card activation notification stored for user:", notificationData);
-
-        // Then send push notifications using available tokens.
-        if (user.fcmToken || user.expoPushToken) {
-          await sendPushNotification(user.fcmToken || user.expoPushToken, notificationData);
-        } else {
-          let tokensSent = false;
-          if (user.fcmTokens && Array.isArray(user.fcmTokens) && user.fcmTokens.length > 0) {
-            for (const token of user.fcmTokens) {
-              await sendPushNotification(token, notificationData);
-            }
-            tokensSent = true;
-          }
-          if (!tokensSent && user.expoPushToken) {
-            await sendPushNotification(user.expoPushToken, notificationData);
-            tokensSent = true;
-          }
-          if (!tokensSent) {
-            console.warn(`No push token found for user ${user.email}`);
-          }
+        } catch (err) {
+          console.error("Error retrieving card details via endpoint:", err);
         }
       } else {
-        console.error('(Notification) Failed to update user record for card creation.');
+        console.warn("User email not available for calling card-details endpoint; using fallback masked card number.");
       }
-    } else if (type === 'deposit') {
-      // Update deposit-related fields for the user record and clear merchantOrderNo after updating.
-      const updateResult = await collection.updateOne(
-        { _id: user._id },
-        {
-          $set: { depositStatus: status, merchantOrderNo: "" },
-        }
-      );
 
-      console.log("UpdateResult for deposit update:", updateResult);
+      const notificationData = {
+        title: "Card Activation",
+        desc: `Your new card ending ${maskedCardNumber} has been successfully created and activated. Happy spending!`,
+        notifyTime: new Date(),
+        userNotify: user.holderId
+      };
 
-      if (updateResult.modifiedCount > 0) {
-        console.log(`(Notification) Deposit updated for merchantOrderNo: ${merchantOrderNo}`);
-        const notificationData = {
-          title: "Deposit Update",
-          desc: `Your deposit for merchant order ${merchantOrderNo} has been updated successfully.`,
-          notifyTime: new Date(),
-          userNotify: user.holderId
-        };
+      // Insert the notification into the notifications collection first.
+      console.log("Card activation notification data before insertion:", notificationData);
+      await insertNotification(notificationData);
+      console.log("Card activation notification stored for user:", notificationData);
 
-        // Insert the deposit notification into the notifications collection first.
-        console.log("Deposit notification data before insertion:", notificationData);
-        await insertNotification(notificationData);
-        console.log("Deposit notification stored for merchantOrderNo:", notificationData);
-
-        // Then send push notifications.
-        if (user.fcmToken || user.expoPushToken) {
-          await sendPushNotification(user.fcmToken || user.expoPushToken, notificationData);
-        } else {
-          console.warn(`No push token found for user ${user.email} during deposit update.`);
-        }
+      // Then send push notifications using available tokens.
+      if (user.fcmToken || user.expoPushToken) {
+        await sendPushNotification(user.fcmToken || user.expoPushToken, notificationData);
       } else {
-        console.error(`Failed to update deposit record for merchantOrderNo: ${merchantOrderNo}`);
+        let tokensSent = false;
+        if (user.fcmTokens && Array.isArray(user.fcmTokens) && user.fcmTokens.length > 0) {
+          for (const token of user.fcmTokens) {
+            await sendPushNotification(token, notificationData);
+          }
+          tokensSent = true;
+        }
+        if (!tokensSent && user.expoPushToken) {
+          await sendPushNotification(user.expoPushToken, notificationData);
+          tokensSent = true;
+        }
+        if (!tokensSent) {
+          console.warn(`No push token found for user ${user.email}`);
+        }
       }
+    } else {
+      console.error('(Notification) Failed to update user record for card creation.');
     }
   } catch (error) {
     console.error('Error processing card transaction notification:', error);
+  }
+}
+
+// Helper function to insert a notification document into the notifications collection.
+async function insertNotification(notificationData) {
+  try {
+    const notificationsDb = client.db("aiacard-sandbox-notify");
+    const notificationsCollection = notificationsDb.collection("aiacard-sandnotify-col");
+    const result = await notificationsCollection.insertOne(notificationData);
+    console.log("Notification inserted into DB with result:", result);
+  } catch (error) {
+    console.error("Error inserting notification:", error);
+    throw error;
   }
 }
 
