@@ -616,8 +616,8 @@ app.post(
           console.log('Processing deposit update webhook for merchantOrderNo:', merchantOrderNo);
 
           // Use environment variable settings or fall back to the default values.
-          const dbName = process.env.MONGODB_DB_NAME_TOPUP || "aiacard-sandbox-topup";
-          const collectionName = process.env.MONGODB_COLLECTION_TOPUP || "aiacard-sandtopup-col";
+          const dbName = "aiacard-sandbox-topup";
+          const collectionName = "aiacard-sandtopup-col";
 
           // Update the deposit record based solely on the merchantOrderNo.
           const depositDB = client.db(dbName);
