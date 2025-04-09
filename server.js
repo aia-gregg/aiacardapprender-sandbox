@@ -249,7 +249,7 @@ app.post('/api/reset-2fa', async (req, res) => {
 // Collection: aiacard-sandvouch-col
 // Coupon validation endpoint:
 // Coupon validation endpoint with logging and expiry check
-app.post('/validate-coupon', async (req, res) => {
+app.post('/validate-coupon', verifyJWT, async (req, res) => {
   console.log('Received payload:', req.body);
   try {
     const { couponCode } = req.body;
@@ -295,7 +295,7 @@ app.post('/validate-coupon', async (req, res) => {
 });
 
 // Endpoint to fetch referrals for a given referral ID
-app.get('/referrals', async (req, res) => {
+app.get('/referrals', verifyJWT, async (req, res) => {
   const { referralId } = req.query;
   if (!referralId) {
     return res.status(400).json({ success: false, message: "Missing referralId parameter" });
@@ -368,7 +368,7 @@ app.get('/referrals', async (req, res) => {
 });
 
 // New endpoint to fetch referral reward records from the referrals DB
-app.get('/referral-rewards', async (req, res) => {
+app.get('/referral-rewards', verifyJWT, async (req, res) => {
   const { referralId } = req.query;
   if (!referralId) {
     return res.status(400).json({ success: false, message: "Missing referralId parameter" });
@@ -399,7 +399,7 @@ app.get('/referral-rewards', async (req, res) => {
 });
 
 // Endpoint to update the user's biometrics preference
-app.post('/api/update-biometrics', async (req, res) => {
+app.post('/api/update-biometrics', verifyJWT, async (req, res) => {
   const { email, biometricsEnabled } = req.body;
   if (!email || typeof biometricsEnabled !== 'boolean') {
     return res.status(400).json({ error: 'Missing or invalid parameters' });
@@ -678,7 +678,7 @@ app.post('/webhook', express.json({verify: (req, res, buf) => {req.rawBody = buf
 );
 
 // Endpoint to fetch paginated topup records from MongoDB
-app.post('/get-topups', async (req, res) => {
+app.post('/get-topups', verifyJWT, async (req, res) => {
   try {
     const { pageNum = 1, pageSize = 15, cardNo, startTime, endTime } = req.body;
 
