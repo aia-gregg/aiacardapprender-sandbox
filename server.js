@@ -75,7 +75,7 @@ client.connect()
   async function decryptUsingMicroservice(encryptedData) {
     if (!encryptedData) return null;
     try {
-      const response = await fetch("process.env.AIA_RENDER_SERVER_JAVA_URL/api/decrypt", {
+      const response = await fetch("https://aiacardappjava-sandbox.onrender.com/api/decrypt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ data: encryptedData })
@@ -727,7 +727,7 @@ app.post('/get-topups', verifyJWT, async (req, res) => {
 // Updated helper function for calling the card-details endpoint
 async function callCardDetailsEndpoint(email, cardNo) {
   try {
-    const response = await fetch('process.env.AIA_RENDER_SERVER_URL/card-details', {
+    const response = await fetch('https://aiacardapprender-sandbox.onrender.com/card-details', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, cardNo }),
@@ -1070,7 +1070,7 @@ async function processCardFeePatch(payload) {
 async function callCardDetailsEndpoint(email, cardNo) {
   try {
     // Adjust this function using your preferred HTTP client (e.g., fetch, axios)
-    const response = await fetch('process.env.AIA_RENDER_SERVER_URL/card-details', {
+    const response = await fetch('https://aiacardapprender-sandbox.onrender.com/card-details', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, cardNo }),
