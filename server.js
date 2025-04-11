@@ -6,7 +6,7 @@ const nodemailer = require('nodemailer');
 const { MongoClient, ServerApiVersion, Decimal128 } = require('mongodb');
 const crypto = require('crypto');
 const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
-const stripe = require('stripe')('sk_test_51Qy1IkDO1xHmcck34QjJM47p4jkKFGViTuIVlbY1njZqObWxc9hWMvrWCsiSVgCRd08Xx1fyfXYG90Hxw6yl84WO00Xt3GGTjU'); // Test secret key
+const stripe = require('stripe')(process.env.STRIPE_TEST_KEY); // Test secret key
 const { merchantPrivateKey, callWasabiApi } = require('./wasabiApi');
 const fireblocks = require('./fireblocks');
 const admin = require('./firebaseadmin');
@@ -75,7 +75,7 @@ client.connect()
   async function decryptUsingMicroservice(encryptedData) {
     if (!encryptedData) return null;
     try {
-      const response = await fetch("https://aiacardappjava-sandbox.onrender.com/api/decrypt", {
+      const response = await fetch("process.env.AIA_RENDER_SERVER_JAVA_URL/api/decrypt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ data: encryptedData })
@@ -101,8 +101,8 @@ app.get('/api/generate-2fa', async (req, res) => {
     return res.status(400).json({ error: 'Missing email parameter' });
   }
   try {
-    const database = client.db("aiacard-sandbox-db");
-    const collection = database.collection("aiacard-sandox-col");
+    const database = client.db(process.env.MONGODB_DB_NAME);
+    const collection = database.collection(process.env.MONGODB_COLLECTION);
     let user = await collection.findOne({ email });
     
     if (!user) {
@@ -135,8 +135,8 @@ app.post('/api/verify-2fa', async (req, res) => {
     return res.status(400).json({ error: 'Missing email or otp in request body' });
   }
   try {
-    const database = client.db("aiacard-sandbox-db");
-    const collection = database.collection("aiacard-sandox-col");
+    const database = client.db(process.env.MONGODB_DB_NAME);
+    const collection = database.collection(process.env.MONGODB_COLLECTION);
     const user = await collection.findOne({ email });
     if (!user || !user.totpSecret) {
       return res.status(400).json({ error: 'User not found or 2FA not initialized' });
@@ -165,8 +165,8 @@ app.post('/api/reset-2fa', async (req, res) => {
     return res.status(400).json({ error: 'Missing email parameter' });
   }
   try {
-    const database = client.db("aiacard-sandbox-db");
-    const collection = database.collection("aiacard-sandox-col");
+    const database = client.db(process.env.MONGODB_DB_NAME);
+    const collection = database.collection(process.env.MONGODB_COLLECTION);
     const user = await collection.findOne({ email });
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
@@ -187,8 +187,8 @@ app.post('/api/reset-2fa', async (req, res) => {
 //     console.log("Starting data seeding from WasabiCard API...");
 
 //     // Get the MongoDB collection for storing region, city, and mobile area code data
-//     const db = client.db("aiacard-sandbox-cities");
-//     const collection = db.collection("aiacard-sandcity-col");
+//     const db = client.db(process.env.MONGODB_DB_NAME_CITY);
+//     const collection = db.collection(process.env.MONGODB_COLLECTION_CITY);
 
     // Fetch region data using callWasabiApi
     // const regionResult = await callWasabiApi('/merchant/core/mcb/common/region', {});
@@ -244,13 +244,9 @@ app.post('/api/reset-2fa', async (req, res) => {
 //   }
 // }
 
-// Coupon Verification Endpoint
-// Database: aiacard-sandbox-voucher
-// Collection: aiacard-sandvouch-col
-// Coupon validation endpoint:
+
 // Coupon validation endpoint with logging and expiry check
 app.post('/validate-coupon', verifyJWT, async (req, res) => {
-  console.log('Received payload:', req.body);
   try {
     const { couponCode } = req.body;
     if (!couponCode) {
@@ -258,8 +254,8 @@ app.post('/validate-coupon', verifyJWT, async (req, res) => {
     }
 
     // Connect to the coupon database and collection
-    const database = client.db('aiacard-sandbox-voucher');
-    const collection = database.collection('aiacard-sandvouch-col');
+    const database = client.db(process.env.MONGODB_DB_NAME_VOUCHER);
+    const collection = database.collection(process.env.MONGODB_COLLECTION_VOUCHER);
 
     // Query for the coupon using the provided coupon code
     const coupon = await collection.findOne({ couponCode: couponCode.trim().toUpperCase() });
@@ -270,8 +266,6 @@ app.post('/validate-coupon', verifyJWT, async (req, res) => {
     // IMPORTANT: use 'coupon.couponExpiry' instead of 'coupon.expiry'
     const expiryDate = new Date(coupon.couponExpiry);
     const now = new Date();
-    console.log('Coupon expiry datetime:', expiryDate);
-    console.log('Current datetime:', now);
 
     // Compare the two dates
     if (now > expiryDate) {
@@ -302,8 +296,8 @@ app.get('/referrals', verifyJWT, async (req, res) => {
   }
 
   try {
-    const database = client.db("aiacard-sandbox-db");
-    const collection = database.collection("aiacard-sandox-col");
+    const database = client.db(process.env.MONGODB_DB_NAME);
+    const collection = database.collection(process.env.MONGODB_COLLECTION);
 
     // Retrieve all users referred by the given referralId.
     const referredUsers = await collection.find({ referralId }).toArray();
@@ -374,8 +368,8 @@ app.get('/referral-rewards', verifyJWT, async (req, res) => {
     return res.status(400).json({ success: false, message: "Missing referralId parameter" });
   }
   try {
-    const referralDb = client.db("aiacard-sandbox-refer");
-    const collection = referralDb.collection("aiacard-sandrefer-col");
+    const referralDb = client.db(process.env.MONGODB_DB_NAME_REFER);
+    const collection = referralDb.collection(process.env.MONGODB_COLLECTION_REFER);
     
     // Query for records with the matching referralId
     const rewards = await collection.find({ referralId }).toArray();
@@ -405,8 +399,8 @@ app.post('/api/update-biometrics', verifyJWT, async (req, res) => {
     return res.status(400).json({ error: 'Missing or invalid parameters' });
   }
   try {
-    const database = client.db("aiacard-sandbox-db");
-    const collection = database.collection("aiacard-sandox-col");
+    const database = client.db(process.env.MONGODB_DB_NAME);
+    const collection = database.collection(process.env.MONGODB_COLLECTION);
     const updateResult = await collection.updateOne({ email }, { $set: { biometricsEnabled } });
     if (updateResult.modifiedCount > 0) {
       res.json({ success: true, biometricsEnabled });
@@ -442,7 +436,6 @@ async function openCard(holderId, email, aiaCardId) {
 
   try {
     const response = await callWasabiApi('/merchant/core/mcb/card/openCard', payload);
-    // console.log('Card opened successfully:', response);
 
     // Assuming response.data is an array with at least one element containing orderNo
     let orderNo = null;
@@ -452,8 +445,8 @@ async function openCard(holderId, email, aiaCardId) {
     
     if (orderNo) {
       // Log the orderNo into MongoDB so that the webhook can later lookup the record.
-      const database = client.db("aiacard-sandbox-db");
-      const collection = database.collection("aiacard-sandox-col");
+      const database = client.db(process.env.MONGODB_DB_NAME);
+      const collection = database.collection(process.env.MONGODB_COLLECTION);
 
       // First, retrieve the user document using the holderId so we can get activeCards count.
       const user = await collection.findOne({ holderId: holderId });
@@ -469,7 +462,6 @@ async function openCard(holderId, email, aiaCardId) {
       );
 
       if (updateResult.modifiedCount > 0) {
-        // console.log(`User with holderId ${holderId} updated with orderNo: ${orderNo} and ${cardAIAField}: ${aiaCardId}`);
       } else {
         console.error(`Failed to update user with holderId ${holderId} with orderNo: ${orderNo}`);
       }
@@ -508,7 +500,6 @@ async function sendFCMPushNotification(deviceToken, notificationData) {
 
   try {
     const response = await admin.messaging().send(message);
-    console.log('FCM message sent successfully:', response);
     return response;
   } catch (error) {
     console.error('Error sending FCM message:', error);
@@ -554,13 +545,10 @@ app.post('/webhook', express.json({verify: (req, res, buf) => {req.rawBody = buf
       data: null,
     };
     res.status(200).json(responsePayload);
-    console.log('Webhook acknowledged:', responsePayload);
 
     // Process the webhook asynchronously.
     setImmediate(async () => {
       try {
-        console.log('Webhook raw payload:', req.rawBody);
-        console.log('Webhook parsed payload:', req.body);
 
         // (Signature verification code omitted for brevity)
 
@@ -570,14 +558,12 @@ app.post('/webhook', express.json({verify: (req, res, buf) => {req.rawBody = buf
         // Process deposit-type webhook updates.
         if (merchantOrderNo && status && type === 'deposit') {
           if (status !== 'success') {
-            console.log(`Deposit webhook received status "${status}". Waiting for success event.`);
             return;
           }
-          console.log('Processing deposit update webhook for merchantOrderNo:', merchantOrderNo);
 
           // Use environment variable settings or fall back to the default values.
-          const dbName = "aiacard-sandbox-topup";
-          const collectionName = "aiacard-sandtopup-col";
+          const dbName = process.env.MONGODB_DB_NAME_TOPUP;
+          const collectionName = process.env.MONGODB_COLLECTION_TOPUP;
 
           // Update the deposit record based solely on the merchantOrderNo.
           const depositDB = client.db(dbName);
@@ -588,7 +574,6 @@ app.post('/webhook', express.json({verify: (req, res, buf) => {req.rawBody = buf
           );
 
           if (updateResult.modifiedCount > 0) {
-            console.log(`Deposit record updated for merchantOrderNo: ${merchantOrderNo} with status: ${status}`);
 
             // Delegate notifications (if applicable).
             const topupPayload = {
@@ -609,7 +594,6 @@ app.post('/webhook', express.json({verify: (req, res, buf) => {req.rawBody = buf
         // -----------------------------------------------------
         const category = req.headers['x-wsb-category'];
         if (category) {
-          console.log('Notification category:', category);
           switch (category) {
             case 'card_transaction':
               processCardTransaction(req.body).catch((err) =>
@@ -640,13 +624,12 @@ app.post('/webhook', express.json({verify: (req, res, buf) => {req.rawBody = buf
           return;
         }
         if (type !== 'create') {
-          console.log(`Webhook type is ${type} (expected 'create' or 'deposit'). Skipping fallback processing.`);
           return;
         }
 
         // For fallback card activation updates.
-        const database = client.db('aiacard-sandbox-db');
-        const collection = database.collection('aiacard-sandox-col');
+        const database = client.db(process.env.MONGODB_DB_NAME);
+        const collection = database.collection(process.env.MONGODB_COLLECTION);
         const user = await collection.findOne({ orderNo });
         if (!user) {
           console.error(`No user found with orderNo: ${orderNo}`);
@@ -665,7 +648,6 @@ app.post('/webhook', express.json({verify: (req, res, buf) => {req.rawBody = buf
         );
 
         if (updateResult2.modifiedCount > 0) {
-          console.log(`User ${user.email} updated: ${cardFieldName} set to ${cardNo}. Active cards: ${newCardIndex}`);
           await handleReferralReward(user, cardNo);
         } else {
           console.error('Failed to update user record with new card information.');
@@ -697,8 +679,8 @@ app.post('/get-topups', verifyJWT, async (req, res) => {
       };
     }
 
-    const db = client.db("aiacard-sandbox-topup");
-    const collection = db.collection("aiacard-sandtopup-col");
+    const db = client.db(process.env.MONGODB_DB_NAME_TOPUP);
+    const collection = db.collection(process.env.MONGODB_COLLECTION_TOPUP);
 
     // Fetch all matching records
     const allRecords = await collection.find(query).toArray();
@@ -745,7 +727,7 @@ app.post('/get-topups', verifyJWT, async (req, res) => {
 // Updated helper function for calling the card-details endpoint
 async function callCardDetailsEndpoint(email, cardNo) {
   try {
-    const response = await fetch('https://aiacardapprender-sandbox.onrender.com/card-details', {
+    const response = await fetch('process.env.AIA_RENDER_SERVER_URL/card-details', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, cardNo }),
@@ -773,13 +755,12 @@ async function processCardTransaction(payload) {
       return;
     }
   } else {
-    console.log(`Transaction type ${type} is not implemented.`);
     return;
   }
 
   try {
-    const database = client.db("aiacard-sandbox-db");
-    const collection = database.collection("aiacard-sandox-col");
+    const database = client.db(process.env.MONGODB_DB_NAME);
+    const collection = database.collection(process.env.MONGODB_COLLECTION);
     let user = null;
 
     // Use different user lookup depending on the transaction type.
@@ -813,10 +794,7 @@ async function processCardTransaction(payload) {
         }
       );
 
-      console.log("UpdateResult for card creation:", updateResult);
-
       if (updateResult.modifiedCount > 0) {
-        console.log(`(Notification) User ${user.email} updated: ${cardFieldName} set to ${cardNo}. Active cards: ${newCardIndex}`);
         
         // Retrieve full card details via the card-details endpoint.
         let maskedCardNumber = "**** " + cardNo.slice(-4);
@@ -846,9 +824,7 @@ async function processCardTransaction(payload) {
         };
 
         // Insert the notification into the notifications collection first.
-        console.log("Card activation notification data before insertion:", notificationData);
         await insertNotification(notificationData);
-        console.log("Card activation notification stored for user:", notificationData);
 
         // Then send push notifications using available tokens.
         if (user.fcmToken || user.expoPushToken) {
@@ -881,10 +857,8 @@ async function processCardTransaction(payload) {
         }
       );
 
-      console.log("UpdateResult for deposit update:", updateResult);
 
       if (updateResult.modifiedCount > 0) {
-        console.log(`(Notification) Deposit updated for merchantOrderNo: ${merchantOrderNo}`);
         const notificationData = {
           title: "Deposit Update",
           desc: `Your deposit for merchant order ${merchantOrderNo} has been updated successfully.`,
@@ -893,9 +867,7 @@ async function processCardTransaction(payload) {
         };
 
         // Insert the deposit notification into the notifications collection first.
-        console.log("Deposit notification data before insertion:", notificationData);
         await insertNotification(notificationData);
-        console.log("Deposit notification stored for merchantOrderNo:", notificationData);
 
         // Then send push notifications.
         if (user.fcmToken || user.expoPushToken) {
@@ -915,10 +887,9 @@ async function processCardTransaction(payload) {
 // Helper function to insert a notification document into the notifications collection.
 async function insertNotification(notificationData) {
   try {
-    const notificationsDb = client.db("aiacard-sandbox-notify");
-    const notificationsCollection = notificationsDb.collection("aiacard-sandnotify-col");
+    const notificationsDb = client.db(process.env.MONGODB_DB_NAME_NOTIFY);
+    const notificationsCollection = notificationsDb.collection(process.env.MONGODB_COLLECTION_NOTIFY);
     const result = await notificationsCollection.insertOne(notificationData);
-    console.log("Notification inserted into DB with result:", result);
   } catch (error) {
     console.error("Error inserting notification:", error);
     throw error;
@@ -932,18 +903,16 @@ async function processCardAuthTransaction(payload) {
     console.error('Missing cardNo, merchantName, or amount in card auth transaction payload.');
     return;
   }
-  console.log('Processing card auth transaction notification:', payload);
   
   try {
     // Insert the transaction payload into the cardAuthTransactions collection.
-    const database = client.db("aiacard-sandbox-db");
+    const database = client.db(process.env.MONGODB_DB_NAME);
     const collection = database.collection("cardAuthTransactions");
     await collection.insertOne(payload);
-    console.log("(Notification) Card auth transaction logged successfully.");
     
     // Look up the user using holderId.
-    const usersDb = client.db("aiacard-sandbox-db");
-    const usersCollection = usersDb.collection("aiacard-sandox-col");
+    const usersDb = client.db(process.env.MONGODB_DB_NAME);
+    const usersCollection = usersDb.collection(process.env.MONGODB_COLLECTION);
     const user = await usersCollection.findOne({ holderId });
     if (!user) {
       console.error(`No user found for holderId: ${holderId}`);
@@ -989,7 +958,6 @@ async function processCardAuthTransaction(payload) {
         console.warn(`No push token found for holderId ${holderId}`);
       }
     } else {
-      console.log("Broadcast push notification for all users not implemented.");
     }
     
   } catch (error) {
@@ -1004,17 +972,15 @@ async function processCardFeePatch(payload) {
     console.error('Missing required fields in card fee patch payload.');
     return;
   }
-  console.log('Processing card fee patch (reversal) notification:', payload);
   
   try {
-    const database = client.db("aiacard-sandbox-db");
+    const database = client.db(process.env.MONGODB_DB_NAME);
     const collection = database.collection("cardFeePatchTransactions");
     await collection.insertOne(payload);
-    console.log(`(Notification) Card fee patch transaction for tradeNo ${tradeNo} logged successfully.`);
     
     // Look up the user using holderId
-    const usersDb = client.db("aiacard-sandbox-db");
-    const usersCollection = usersDb.collection("aiacard-sandox-col");
+    const usersDb = client.db(process.env.MONGODB_DB_NAME);
+    const usersCollection = usersDb.collection(process.env.MONGODB_COLLECTION);
     const user = await usersCollection.findOne({ holderId });
     
     // Set a fallback for maskedCardNumber using the provided cardNumber.
@@ -1047,7 +1013,6 @@ async function processCardFeePatch(payload) {
     };
 
     await insertNotification(notificationData);
-    console.log(`(Notification) Card fee patch notification stored for tradeNo ${tradeNo}`, notificationData);
 
     // Send push notifications using the user's tokens.
     if (holderId) {
@@ -1057,7 +1022,6 @@ async function processCardFeePatch(payload) {
         console.warn(`No push token found for holderId ${holderId}`);
       }
     } else {
-      console.log("Broadcast push notification for all users not implemented.");
     }
     
   } catch (error) {
@@ -1070,7 +1034,7 @@ async function processCardFeePatch(payload) {
 async function callCardDetailsEndpoint(email, cardNo) {
   try {
     // Adjust this function using your preferred HTTP client (e.g., fetch, axios)
-    const response = await fetch('https://aiacardapprender-sandbox.onrender.com/card-details', {
+    const response = await fetch('process.env.AIA_RENDER_SERVER_URL/card-details', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, cardNo }),
@@ -1091,15 +1055,14 @@ async function processTopupNotification(payload) {
   }
 
   if (status !== "success") {
-    console.log(`Topup status is ${status}. No notification triggered for non-successful topups.`);
     return;
   }
 
   try {
     // Look up the deposit record from the topup database/collection.
     const depositRecord = await client
-      .db("aiacard-sandbox-topup")
-      .collection("aiacard-sandtopup-col")
+      .db(process.env.MONGODB_DB_NAME_TOPUP)
+      .collection(process.env.MONGODB_COLLECTION_TOPUP)
       .findOne({ merchantOrderNo });
 
     if (!depositRecord) {
@@ -1114,8 +1077,8 @@ async function processTopupNotification(payload) {
     }
 
     // Look up the user from your main user collection.
-    const database = client.db("aiacard-sandbox-db");
-    const usersCollection = database.collection("aiacard-sandox-col");
+    const database = client.db(process.env.MONGODB_DB_NAME);
+    const usersCollection = database.collection(process.env.MONGODB_COLLECTION);
     const user = await usersCollection.findOne({ holderId: lookupHolderId });
     
     if (!user) {
@@ -1151,8 +1114,6 @@ async function processTopupNotification(payload) {
         maskedCardNumber = "**** " + user.cardNumber.slice(-4);
       }
     }
-    
-    console.log(`DEBUG: Computed maskedCardNumber for holderId ${lookupHolderId}: ${maskedCardNumber}`);
 
     // Build the notification payload.
     const notificationData = {
@@ -1164,7 +1125,6 @@ async function processTopupNotification(payload) {
 
     // Insert the notification into the notifications collection.
     await insertNotification(notificationData);
-    console.log(`(Notification) Topup notification stored for merchantOrderNo: ${merchantOrderNo}`, notificationData);
 
     // Send push notifications using the user's push tokens.
     let tokensSent = false;
@@ -1198,8 +1158,8 @@ async function processTopupNotification(payload) {
 // New endpoint to fetch notifications from the dedicated notifications database/collection
 app.get('/notifications', async (req, res) => {
   try {
-    const database = client.db("aiacard-sandbox-notify");
-    const collection = database.collection("aiacard-sandnotify-col");
+    const database = client.db(process.env.MONGODB_DB_NAME_NOTIFY);
+    const collection = database.collection(process.env.MONGODB_COLLECTION_NOTIFY);
 
     // Optional filtering: if a "user" query parameter is provided,
     // return notifications where userNotify is either the given holderId or "All".
@@ -1226,8 +1186,8 @@ app.post('/api/save-token', async (req, res) => {
     return res.status(400).json({ success: false, message: "Email and token are required." });
   }
   try {
-    const database = client.db("aiacard-sandbox-db");
-    const collection = database.collection("aiacard-sandox-col");
+    const database = client.db(process.env.MONGODB_DB_NAME);
+    const collection = database.collection(process.env.MONGODB_COLLECTION);
 
     // Use $addToSet so that the token is added only if it's not already in the array.
     const updateResult = await collection.updateOne(
@@ -1236,7 +1196,6 @@ app.post('/api/save-token', async (req, res) => {
     );
 
     // Optionally, you can log updateResult to verify changes.
-    console.log(`FCM token updated for ${email}:`, updateResult);
 
     res.json({ success: true, message: "Token saved successfully." });
   } catch (error) {
@@ -1283,9 +1242,7 @@ app.post('/card-auth-transactions', async (req, res) => {
       ...(endTime && { endTime }),
     };
 
-    console.log('Sending payload to Wasabi API:', JSON.stringify(payload));
     const response = await callWasabiApi('/merchant/core/mcb/card/authTransaction', payload);
-    console.log('Received response from Wasabi API:', JSON.stringify(response));
     res.status(200).json(response);
   } catch (error) {
     console.error('Error fetching card auth transactions:', error);
@@ -1301,8 +1258,8 @@ app.post('/get-active-cards', async (req, res) => {
       return res.status(400).json({ success: false, message: "Email is required" });
     }
     
-    const database = client.db("aiacard-sandbox-db");
-    const collection = database.collection("aiacard-sandox-col");
+    const database = client.db(process.env.MONGODB_DB_NAME);
+    const collection = database.collection(process.env.MONGODB_COLLECTION);
     
     // Lookup user document by email
     const user = await collection.findOne({ email });
@@ -1329,7 +1286,6 @@ app.post('/get-active-cards', async (req, res) => {
       
       // Call Wasabi's API using your helper function
       const response = await callWasabiApi('/merchant/core/mcb/card/info', payload);
-      // console.log('Raw response from Wasabi API for cardNo:', cardNo, response);
       
       if (response && response.success && response.data) {
         const data = response.data;
@@ -1381,7 +1337,6 @@ app.post('/get-active-cards', async (req, res) => {
 
 // New Topup/Deposit Endpoint
 app.post('/top-up', verifyJWT, verifyHMAC, async (req, res) => {
-  console.log('Received /top-up request with payload:', req.body);
   const { cardNo, merchantOrderNo, amount, holderId, chosenCrypto } = req.body;
 
   if (!cardNo || !merchantOrderNo || !amount) {
@@ -1400,11 +1355,8 @@ app.post('/top-up', verifyJWT, verifyHMAC, async (req, res) => {
     holderId  // Optional field.
   };
 
-  console.log('Sending deposit payload to Wasabi:', depositPayload);
-
   try {
     const data = await callWasabiApi('/merchant/core/mcb/card/deposit', depositPayload);
-    console.log('Wasabi deposit API response:', data);
 
     if (data.success && data.data && data.data.status === 'processing') {
       // Store the original transaction time (as returned by Wasabi)
@@ -1425,12 +1377,9 @@ app.post('/top-up', verifyJWT, verifyHMAC, async (req, res) => {
         holderId
       };
 
-      console.log('Inserting topup record into MongoDB:', topupRecord);
-
-      const dbName = "aiacard-sandbox-topup";
-      const collectionName = "aiacard-sandtopup-col";
+      const dbName = process.env.MONGODB_DB_NAME_TOPUP;
+      const collectionName = process.env.MONGODB_COLLECTION_TOPUP;
       const insertResult = await client.db(dbName).collection(collectionName).insertOne(topupRecord);
-      console.log('MongoDB insertion result:', insertResult);
 
       return res.status(200).json({ success: true, data });
     } else {
@@ -1451,43 +1400,6 @@ app.post('/top-up', verifyJWT, verifyHMAC, async (req, res) => {
   }
 });
 
-// GET endpoint to fetch updated topup record based on orderNo and holderId
-// app.get('/top-up-status', async (req, res) => {
-//   const orderNo = req.query.orderNo;
-//   const holderId = req.query.holderId;
-
-//   if (!orderNo || !holderId) {
-//     console.error('Validation error: Missing required query parameters: orderNo and holderId');
-//     return res.status(400).json({
-//       success: false,
-//       message: 'Missing required query parameters: orderNo and holderId.'
-//     });
-//   }
-
-//   console.log(`Fetching topup record for orderNo: ${orderNo} and holderId: ${holderId}`);
-
-//   try {
-//     const dbName = "aiacard-sandbox-topup";
-//     const collectionName = "aiacard-sandtopup-col";
-//     const topupRecord = await client.db(dbName).collection(collectionName)
-//       .findOne({ orderNo: orderNo, holderId: holderId });
-
-//     if (!topupRecord) {
-//       console.error(`No topup record found for orderNo: ${orderNo} and holderId: ${holderId}`);
-//       return res.status(404).json({ success: false, message: 'Topup record not found.' });
-//     }
-
-//     return res.status(200).json({ success: true, data: topupRecord });
-//   } catch (error) {
-//     console.error('Error in GET /top-up-status endpoint:', error);
-//     return res.status(500).json({
-//       success: false,
-//       message: 'Internal server error',
-//       error: error.message
-//     });
-//   }
-// });
-
 // Freeze endpoint with dynamic Wasabi API call
 app.post('/merchant/core/mcb/card/freeze', async (req, res) => {
   const { cardNo, maskedCardNumber } = req.body;
@@ -1502,15 +1414,12 @@ app.post('/merchant/core/mcb/card/freeze', async (req, res) => {
     return res.status(400).json(errorResponse);
   }
 
-  // console.log("Received freeze request payload:", req.body);
-
   // Create the payload for Wasabi API
   const payload = { cardNo, maskedCardNumber };
 
   try {
     // Call the Wasabi Pay API endpoint for freezing the card
     const freezeResponse = await callWasabiApi('/merchant/core/mcb/card/freeze', payload);
-    // console.log("Freeze response from Wasabi API:", freezeResponse);
     res.json(freezeResponse);
   } catch (error) {
     console.error("Error freezing card:", error);
@@ -1532,15 +1441,12 @@ app.post('/merchant/core/mcb/card/unfreeze', async (req, res) => {
     return res.status(400).json(errorResponse);
   }
 
-  // console.log("Received unfreeze request payload:", req.body);
-
   // Create the payload for Wasabi API
   const payload = { cardNo, maskedCardNumber };
 
   try {
     // Call the Wasabi Pay API endpoint for unfreezing the card
     const unfreezeResponse = await callWasabiApi('/merchant/core/mcb/card/unfreeze', payload);
-    // console.log("Unfreeze response from Wasabi API:", unfreezeResponse);
     res.json(unfreezeResponse);
   } catch (error) {
     console.error("Error unfreezing card:", error);
@@ -1550,12 +1456,12 @@ app.post('/merchant/core/mcb/card/unfreeze', async (req, res) => {
 
 // Nodemailer Configuration
 const transporter = nodemailer.createTransport({
-  host: "smtp-mail.outlook.com",
-  port: 587,
+  host: process.env.EMAIL_HOST,
+  port: process.env.EMAIL_PORT,
   secure: false,
   auth: {
-    user: "verify@card.aianalysis.group",
-    pass: "1gL5zemXG6gFsv331epx",
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
   },
   tls: { ciphers: 'SSLv3' }
 });
@@ -1564,8 +1470,8 @@ const transporter = nodemailer.createTransport({
 app.post('/register', async (req, res) => {
   try {
     const { email, password, ...userData } = req.body;
-    const database = client.db("aiacard-sandbox-db");
-    const collection = database.collection("aiacard-sandox-col");
+    const database = client.db(process.env.MONGODB_DB_NAME);
+    const collection = database.collection(process.env.MONGODB_COLLECTION);
 
     // Check if the email is already registered
     const existingUser = await collection.findOne({ email });
@@ -1609,7 +1515,7 @@ app.post('/register', async (req, res) => {
     console.log(`📩 Generated OTP for ${email}: ${otp}`);
 
     await transporter.sendMail({
-      from: "verify@card.aianalysis.group",
+      from: process.env.EMAIL_USER,
       to: email,
       subject: "Your OTP Code",
       text: `Your OTP code is: ${otp}. It is valid for 10 minutes.`
@@ -1626,8 +1532,8 @@ app.post('/register', async (req, res) => {
 app.post('/verify-otp', async (req, res) => {
   try {
     const { email, otp } = req.body;
-    const database = client.db("aiacard-sandbox-db");
-    const collection = database.collection("aiacard-sandox-col");
+    const database = client.db(process.env.MONGODB_DB_NAME);
+    const collection = database.collection(process.env.MONGODB_COLLECTION);
 
     const user = await collection.findOne({ email });
     if (!user) return res.status(404).json({ success: false, message: "User not found." });
@@ -1642,7 +1548,6 @@ app.post('/verify-otp', async (req, res) => {
     );
 
     const token = jwt.sign({ id: user._id, email: user.email }, secretKey, { expiresIn: '1h' });
-    // console.log(`✅ OTP verified for ${email}. User is now verified.`);
 
     res.status(200).json({
       success: true,
@@ -1704,8 +1609,8 @@ app.post('/refresh-token', async (req, res) => {
 app.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-    const database = client.db("aiacard-sandbox-db");
-    const collection = database.collection("aiacard-sandox-col");
+    const database = client.db(process.env.MONGODB_DB_NAME);
+    const collection = database.collection(process.env.MONGODB_COLLECTION);
 
     const user = await collection.findOne({ email });
     if (!user) {
@@ -1740,7 +1645,7 @@ app.post('/login', async (req, res) => {
     await collection.updateOne({ email }, { $set: { otp, otpExpiry } });
 
     await transporter.sendMail({
-      from: "verify@card.aianalysis.group",
+      from: process.env.EMAIL_USER,
       to: email,
       subject: "Your Login OTP Code",
       text: `Your OTP code for login is: ${otp}. It is valid for 10 minutes.`
@@ -1792,8 +1697,8 @@ app.post('/biometric-login', async (req, res) => {
       return res.status(401).json({ success: false, message: "Refresh token does not match the provided email." });
     }
     // Fetch user data from your database
-    const database = client.db("aiacard-sandbox-db");
-    const collection = database.collection("aiacard-sandox-col");
+    const database = client.db(process.env.MONGODB_DB_NAME);
+    const collection = database.collection(process.env.MONGODB_COLLECTION);
     const user = await collection.findOne({ email });
     if (!user) {
       return res.status(401).json({ success: false, message: "Invalid user." });
@@ -1815,7 +1720,7 @@ app.post('/biometric-login', async (req, res) => {
     console.log(`🔑 Generated Biometric Login OTP for ${email}: ${otp}`);
     await collection.updateOne({ email }, { $set: { otp, otpExpiry } });
     await transporter.sendMail({
-      from: "verify@card.aianalysis.group",
+      from: process.env.EMAIL_USER,
       to: email,
       subject: "Your Login OTP Code",
       text: `Your OTP code for login is: ${otp}. It is valid for 10 minutes.`
@@ -1852,8 +1757,8 @@ app.post('/biometric-login', async (req, res) => {
 app.post('/resend-login-otp', async (req, res) => {
   try {
     const { email } = req.body;
-    const database = client.db("aiacard-sandbox-db");
-    const collection = database.collection("aiacard-sandox-col");
+    const database = client.db(process.env.MONGODB_DB_NAME);
+    const collection = database.collection(process.env.MONGODB_COLLECTION);
 
     const user = await collection.findOne({ email });
     if (!user) {
@@ -1866,7 +1771,7 @@ app.post('/resend-login-otp', async (req, res) => {
 
     await collection.updateOne({ email }, { $set: { otp, otpExpiry } });
     await transporter.sendMail({
-      from: "verify@card.aianalysis.group",
+      from: process.env.EMAIL_USER,
       to: email,
       subject: "Your Login OTP Code",
       text: `Your OTP code for login is: ${otp}. It is valid for 10 minutes.`
@@ -1883,8 +1788,8 @@ app.post('/resend-login-otp', async (req, res) => {
 app.post('/resend-register-otp', async (req, res) => {
   try {
     const { email } = req.body;
-    const database = client.db("aiacard-sandbox-db");
-    const collection = database.collection("aiacard-sandox-col");
+    const database = client.db(process.env.MONGODB_DB_NAME);
+    const collection = database.collection(process.env.MONGODB_COLLECTION);
 
     const user = await collection.findOne({ email });
     if (!user) {
@@ -1898,7 +1803,7 @@ app.post('/resend-register-otp', async (req, res) => {
 
     await collection.updateOne({ email }, { $set: { otp, otpExpiry } });
     await transporter.sendMail({
-      from: "verify@card.aianalysis.group",
+      from: process.env.EMAIL_USER,
       to: email,
       subject: "Your OTP Code",
       text: `Your OTP code is: ${otp}. It is valid for 10 minutes.`
@@ -1915,8 +1820,8 @@ app.post('/resend-register-otp', async (req, res) => {
 app.post('/verify-login-otp', async (req, res) => {
   try {
     const { email, otp } = req.body;
-    const database = client.db("aiacard-sandbox-db");
-    const collection = database.collection("aiacard-sandox-col");
+    const database = client.db(process.env.MONGODB_DB_NAME);
+    const collection = database.collection(process.env.MONGODB_COLLECTION);
 
     const user = await collection.findOne({ email });
     if (!user || user.otp !== otp || new Date(user.otpExpiry) < new Date()) {
@@ -1926,7 +1831,6 @@ app.post('/verify-login-otp', async (req, res) => {
     await collection.updateOne({ email }, { $unset: { otp: "", otpExpiry: "" } });
 
     const token = jwt.sign({ id: user._id, email: user.email }, secretKey, { expiresIn: '1h' });
-    // console.log(`✅ OTP verified for ${email}. User is now logged in.`);
 
     res.status(200).json({
       success: true,
@@ -1960,8 +1864,8 @@ app.post('/updateProfile', async (req, res) => {
     if (!email) {
       return res.status(400).json({ success: false, message: "Email is required." });
     }
-    const database = client.db("aiacard-sandbox-db");
-    const collection = database.collection("aiacard-sandox-col");
+    const database = client.db(process.env.MONGODB_DB_NAME);
+    const collection = database.collection(process.env.MONGODB_COLLECTION);
 
     // Perform the update
     const result = await collection.updateOne({ email }, { $set: updatedData });
@@ -2001,8 +1905,8 @@ app.post('/change-email-otp', async (req, res) => {
         .json({ success: false, message: "Both currentEmail and newEmail are required." });
     }
 
-    const database = client.db("aiacard-sandbox-db");
-    const collection = database.collection("aiacard-sandox-col");
+    const database = client.db(process.env.MONGODB_DB_NAME);
+    const collection = database.collection(process.env.MONGODB_COLLECTION);
 
     // Validate the user by current email
     const user = await collection.findOne({ email: currentEmail });
@@ -2024,10 +1928,8 @@ app.post('/change-email-otp', async (req, res) => {
       }
     );
 
-    console.log(`🔑 Generated Email Change OTP for ${currentEmail}: ${emailChangeOtp}`);
-
     await transporter.sendMail({
-      from: "verify@card.aianalysis.group",
+      from: process.env.EMAIL_USER,
       to: newEmail,
       subject: "Your Email Change OTP Code",
       text: `Your OTP code for changing email is: ${emailChangeOtp}. It is valid for 10 minutes.`,
@@ -2053,8 +1955,8 @@ app.post('/verify-change-email-otp', async (req, res) => {
         .json({ success: false, message: "currentEmail and otp are required." });
     }
 
-    const database = client.db("aiacard-sandbox-db");
-    const collection = database.collection("aiacard-sandox-col");
+    const database = client.db(process.env.MONGODB_DB_NAME);
+    const collection = database.collection(process.env.MONGODB_COLLECTION);
 
     const user = await collection.findOne({ email: currentEmail });
     if (!user) {
@@ -2106,8 +2008,6 @@ app.post('/verify-change-email-otp', async (req, res) => {
       { expiresIn: '1h' }
     );
 
-    // console.log(`✅ Email updated from ${currentEmail} to ${newEmail} successfully. New token generated.`);
-
     res.status(200).json({
       success: true,
       message: "Email updated successfully.",
@@ -2132,8 +2032,8 @@ app.post('/change-phone-otp', async (req, res) => {
         .json({ success: false, message: "currentAreaCode, currentMobile, newAreaCode, and newMobile are required." });
     }
 
-    const database = client.db("aiacard-sandbox-db");
-    const collection = database.collection("aiacard-sandox-col");
+    const database = client.db(process.env.MONGODB_DB_NAME);
+    const collection = database.collection(process.env.MONGODB_COLLECTION);
 
     // Find user by BOTH fields
     const user = await collection.findOne({ areaCode: currentAreaCode, mobile: currentMobile });
@@ -2157,12 +2057,10 @@ app.post('/change-phone-otp', async (req, res) => {
       }
     );
 
-    console.log(`🔑 Generated Phone Change OTP for ${currentAreaCode}${currentMobile}: ${phoneChangeOtp}`);
-
     // If user has an email, send them the OTP. 
     if (user.email) {
       await transporter.sendMail({
-        from: "verify@card.aianalysis.group",
+        from: process.env.EMAIL_USER,
         to: user.email,
         subject: "Your Phone Change OTP Code",
         text: `Your OTP code for changing phone is: ${phoneChangeOtp}. It is valid for 10 minutes.`,
@@ -2190,8 +2088,8 @@ app.post('/verify-change-phone-otp', async (req, res) => {
         .json({ success: false, message: "currentAreaCode, currentMobile, and otp are required." });
     }
 
-    const database = client.db("aiacard-sandbox-db");
-    const collection = database.collection("aiacard-sandox-col");
+    const database = client.db(process.env.MONGODB_DB_NAME);
+    const collection = database.collection(process.env.MONGODB_COLLECTION);
 
     const user = await collection.findOne({ areaCode: currentAreaCode, mobile: currentMobile });
     if (!user) {
@@ -2243,8 +2141,6 @@ app.post('/verify-change-phone-otp', async (req, res) => {
       { expiresIn: '1h' }
     );
 
-    // console.log(`✅ Phone updated from ${currentAreaCode}${currentMobile} to ${newAreaCode}${newMobile} successfully. Token regenerated.`);
-
     res.status(200).json({
       success: true,
       message: "Phone updated successfully.",
@@ -2276,8 +2172,8 @@ app.post('/change-password-otp', async (req, res) => {
     if (!currentPassword || !newPassword) {
       return res.status(400).json({ success: false, message: "Current and new password are required." });
     }
-    const database = client.db("aiacard-sandbox-db");
-    const collection = database.collection("aiacard-sandox-col");
+    const database = client.db(process.env.MONGODB_DB_NAME);
+    const collection = database.collection(process.env.MONGODB_COLLECTION);
     const user = await collection.findOne({ email });
     if (!user) {
       return res.status(404).json({ success: false, message: "User not found." });
@@ -2297,10 +2193,10 @@ app.post('/change-password-otp', async (req, res) => {
         tempNewPassword: newPassword
       }
     });
-    console.log(`🔑 Generated Password Change OTP for ${email}: ${passwordChangeOtp}`);
+
     // Send OTP via email
     await transporter.sendMail({
-      from: "verify@card.aianalysis.group",
+      from: process.env.EMAIL_USER,
       to: email,
       subject: "Your Password Change OTP Code",
       text: `Your OTP code for changing password is: ${passwordChangeOtp}. It is valid for 10 minutes.`
@@ -2333,8 +2229,8 @@ app.post('/verify-change-password-otp', async (req, res) => {
     if (!otp) {
       return res.status(400).json({ success: false, message: "OTP is required." });
     }
-    const database = client.db("aiacard-sandbox-db");
-    const collection = database.collection("aiacard-sandox-col");
+    const database = client.db(process.env.MONGODB_DB_NAME);
+    const collection = database.collection(process.env.MONGODB_COLLECTION);
     const user = await collection.findOne({ email });
     if (!user) {
       return res.status(404).json({ success: false, message: "User not found." });
@@ -2360,7 +2256,6 @@ app.post('/verify-change-password-otp', async (req, res) => {
         secretKey,
         { expiresIn: '1h' }
       );
-      // console.log(`✅ Password updated for ${email}. New token generated.`);
       return res.status(200).json({
         success: true,
         message: "Password updated successfully.",
@@ -2383,8 +2278,8 @@ app.post('/forgot-password-otp', async (req, res) => {
     if (!email) {
       return res.status(400).json({ success: false, message: "Email is required." });
     }
-    const database = client.db("aiacard-sandbox-db");
-    const collection = database.collection("aiacard-sandox-col");
+    const database = client.db(process.env.MONGODB_DB_NAME);
+    const collection = database.collection(process.env.MONGODB_COLLECTION);
 
     const user = await collection.findOne({ email });
     if (!user) {
@@ -2401,10 +2296,8 @@ app.post('/forgot-password-otp', async (req, res) => {
       },
     });
 
-    console.log(`🔑 Generated Forgot Password OTP for ${email}: ${otp}`);
-
     await transporter.sendMail({
-      from: "verify@card.aianalysis.group",
+      from: process.env.EMAIL_USER,
       to: email,
       subject: "Your Forgot Password OTP Code",
       text: `Your OTP code for password recovery is: ${otp}. It is valid for 10 minutes.`,
@@ -2424,8 +2317,8 @@ app.post('/forgot-change-password', async (req, res) => {
     if (!email || !otp || !newPassword) {
       return res.status(400).json({ success: false, message: "Email, OTP and new password are required." });
     }
-    const database = client.db("aiacard-sandbox-db");
-    const collection = database.collection("aiacard-sandox-col");
+    const database = client.db(process.env.MONGODB_DB_NAME);
+    const collection = database.collection(process.env.MONGODB_COLLECTION);
     const user = await collection.findOne({ email });
     if (!user) {
       return res.status(404).json({ success: false, message: "User not found." });
@@ -2446,7 +2339,6 @@ app.post('/forgot-change-password', async (req, res) => {
         secretKey,
         { expiresIn: '1h' }
       );
-      // console.log(`✅ Password updated for ${email}. New token generated.`);
       return res.status(200).json({
         success: true,
         message: "Password updated successfully.",
@@ -2469,8 +2361,8 @@ app.post('/verify-forgot-password-otp', async (req, res) => {
     if (!email || !otp) {
       return res.status(400).json({ success: false, message: "Email and OTP are required." });
     }
-    const database = client.db("aiacard-sandbox-db");
-    const collection = database.collection("aiacard-sandox-col");
+    const database = client.db(process.env.MONGODB_DB_NAME);
+    const collection = database.collection(process.env.MONGODB_COLLECTION);
     const user = await collection.findOne({ email });
     if (!user) {
       return res.status(404).json({ success: false, message: "User not found." });
@@ -2493,8 +2385,8 @@ app.post('/send-card-details-otp', async (req, res) => {
     if (!email) {
       return res.status(400).json({ success: false, message: "Email is required." });
     }
-    const database = client.db("aiacard-sandbox-db");
-    const collection = database.collection("aiacard-sandox-col");
+    const database = client.db(process.env.MONGODB_DB_NAME);
+    const collection = database.collection(process.env.MONGODB_COLLECTION);
     const user = await collection.findOne({ email });
     if (!user) {
       return res.status(404).json({ success: false, message: "User not found." });
@@ -2531,8 +2423,8 @@ app.post('/verify-card-details-otp', async (req, res) => {
     if (!email || !otp) {
       return res.status(400).json({ success: false, message: "Email and OTP are required." });
     }
-    const database = client.db("aiacard-sandbox-db");
-    const collection = database.collection("aiacard-sandox-col");
+    const database = client.db(process.env.MONGODB_DB_NAME);
+    const collection = database.collection(process.env.MONGODB_COLLECTION);
     const user = await collection.findOne({ email });
     if (!user) {
       return res.status(404).json({ success: false, message: "User not found." });
@@ -2543,7 +2435,6 @@ app.post('/verify-card-details-otp', async (req, res) => {
     }
     // OTP is valid; clear the OTP fields
     await collection.updateOne({ email }, { $unset: { cardDetailsOtp: "", cardDetailsOtpExpiry: "" } });
-    // console.log(`✅ Card Details OTP verified for ${email}.`);
     res.status(200).json({ success: true, message: "OTP verified successfully." });
   } catch (error) {
     console.error("❌ Error verifying Card Details OTP:", error);
@@ -2558,8 +2449,8 @@ app.post('/resend-card-details-otp', async (req, res) => {
     if (!email) {
       return res.status(400).json({ success: false, message: "Email is required." });
     }
-    const database = client.db("aiacard-sandbox-db");
-    const collection = database.collection("aiacard-sandox-col");
+    const database = client.db(process.env.MONGODB_DB_NAME);
+    const collection = database.collection(process.env.MONGODB_COLLECTION);
     const user = await collection.findOne({ email });
     if (!user) {
       return res.status(404).json({ success: false, message: "User not found." });
@@ -2590,8 +2481,8 @@ app.post('/resend-change-email-otp', async (req, res) => {
     if (!currentEmail) {
       return res.status(400).json({ success: false, message: "Current email is required." });
     }
-    const database = client.db("aiacard-sandbox-db");
-    const collection = database.collection("aiacard-sandox-col");
+    const database = client.db(process.env.MONGODB_DB_NAME);
+    const collection = database.collection(process.env.MONGODB_COLLECTION);
     const user = await collection.findOne({ email: currentEmail });
     if (!user) {
       return res.status(404).json({ success: false, message: "User not found." });
@@ -2602,7 +2493,6 @@ app.post('/resend-change-email-otp', async (req, res) => {
       { email: currentEmail },
       { $set: { changeEmailOtp: otp, changeEmailOtpExpiry: otpExpiry } }
     );
-    console.log(`🔑 Resent Change Email OTP for ${currentEmail}: ${otp}`);
     await transporter.sendMail({
       from: process.env.EMAIL_USER,
       to: currentEmail,
@@ -2622,8 +2512,8 @@ app.post('/resend-change-phone-otp', async (req, res) => {
     if (!currentAreaCode || !currentMobile) {
       return res.status(400).json({ success: false, message: "Area code and mobile are required." });
     }
-    const database = client.db("aiacard-sandbox-db");
-    const collection = database.collection("aiacard-sandox-col");
+    const database = client.db(process.env.MONGODB_DB_NAME);
+    const collection = database.collection(process.env.MONGODB_COLLECTION);
     const user = await collection.findOne({ areaCode: currentAreaCode, mobile: currentMobile });
     if (!user) {
       return res.status(404).json({ success: false, message: "User not found." });
@@ -2634,7 +2524,6 @@ app.post('/resend-change-phone-otp', async (req, res) => {
       { areaCode: currentAreaCode, mobile: currentMobile },
       { $set: { changePhoneOtp: otp, changePhoneOtpExpiry: otpExpiry } }
     );
-    console.log(`🔑 Resent Change Phone OTP for ${currentAreaCode}${currentMobile}: ${otp}`);
     await transporter.sendMail({
       from: process.env.EMAIL_USER,
       to: user.email,
@@ -2668,9 +2557,6 @@ app.post('/create-zendesk-ticket', async (req, res) => {
     const auth = `${zendeskEmail}/token:${zendeskApiToken}`;
     const encodedAuth = Buffer.from(auth).toString('base64');
 
-    // console.log('Using Zendesk endpoint:', url);
-    // console.log('Encoded Auth Header (masked):', encodedAuth.substring(0, 10) + '...');
-
     const payload = {
       ticket: {
         subject: subject,
@@ -2693,8 +2579,6 @@ app.post('/create-zendesk-ticket', async (req, res) => {
 
     // Rename the parsed JSON response to avoid naming conflicts:
     const zendeskData = await response.json();
-    // console.log('Zendesk response status:', response.status);
-    // console.log('Zendesk response data:', zendeskData);
 
     if (response.status === 202 || response.status === 200) {
       return res.json({ success: true, message: "Ticket creation accepted", data: zendeskData });
@@ -2744,8 +2628,8 @@ app.post('/create-cardholder', async (req, res) => {
       return res.status(400).json({ success: false, message: "Email is required" });
     }
 
-    const database = client.db("aiacard-sandbox-db");
-    const collection = database.collection("aiacard-sandox-col");
+    const database = client.db(process.env.MONGODB_DB_NAME);
+    const collection = database.collection(process.env.MONGODB_COLLECTION);
     const user = await collection.findOne({ email });
 
     if (!user) {
@@ -2830,8 +2714,8 @@ app.post('/card-details', async (req, res) => {
       return res.status(400).json({ success: false, message: "Email is required" });
     }
 
-    const database = client.db("aiacard-sandbox-db");
-    const collection = database.collection("aiacard-sandox-col");
+    const database = client.db(process.env.MONGODB_DB_NAME);
+    const collection = database.collection(process.env.MONGODB_COLLECTION);
     const user = await collection.findOne({ email });
     if (!user) {
       return res.status(404).json({ success: false, message: "User not found" });
