@@ -1064,7 +1064,7 @@ async function processCardFeePatch(payload) {
     console.error('Error processing card fee patch notification:', error);
   }
 }
-
+  
 // Helper function to process Topup (Deposit) notifications
 // Updated helper function to process Topup (Deposit) notifications
 async function callCardDetailsEndpoint(email, cardNo) {
