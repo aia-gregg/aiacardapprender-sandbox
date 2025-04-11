@@ -845,6 +845,14 @@ async function processCardTransaction(payload) {
             console.warn(`No push token found for user ${user.email}`);
           }
         }
+        if (user.email) {
+          await transporter.sendMail({
+            from: process.env.EMAIL_USER,
+            to: user.email,
+            subject: "Card Activation",
+            text: `Your new card ending ${maskedCardNumber} has been successfully created and activated. Happy spending!`
+          });
+        }
       } else {
         console.error('(Notification) Failed to update user record for card creation.');
       }
@@ -874,6 +882,15 @@ async function processCardTransaction(payload) {
           await sendPushNotification(user.fcmToken || user.expoPushToken, notificationData);
         } else {
           console.warn(`No push token found for user ${user.email} during deposit update.`);
+        }
+         // Email notification for deposit update.
+         if (user.email) {
+          await transporter.sendMail({
+            from: process.env.EMAIL_USER,
+            to: user.email,
+            subject: "Deposit Update",
+            text: `Your deposit for merchant order ${merchantOrderNo} has been updated successfully.`
+          });
         }
       } else {
         console.error(`Failed to update deposit record for merchantOrderNo: ${merchantOrderNo}`);
@@ -959,6 +976,15 @@ async function processCardAuthTransaction(payload) {
       }
     } else {
     }
+     // Optionally, send an email notification.
+     if (user.email) {
+      await transporter.sendMail({
+        from: process.env.EMAIL_USER,
+        to: user.email,
+        subject: "Transaction",
+        text: `Authorization transaction for ${amount} from card ending ${maskedCardNumber} has been processed at ${merchantName}.`
+      });
+    }
     
   } catch (error) {
     console.error('Error processing card auth transaction notification:', error);
@@ -1022,6 +1048,16 @@ async function processCardFeePatch(payload) {
         console.warn(`No push token found for holderId ${holderId}`);
       }
     } else {
+    }
+
+    // Optionally, send an email notification.
+    if (user.email) {
+      await transporter.sendMail({
+        from: process.env.EMAIL_USER,
+        to: user.email,
+        subject: "Transaction Reversal",
+        text: `Reversal processed for ${currency} ${amount} for card ending ${maskedCardNumber}.`
+      });
     }
     
   } catch (error) {
@@ -1142,18 +1178,21 @@ async function processTopupNotification(payload) {
       console.warn(`No push token found for user ${user.email}`);
     }
 
-    // Optionally, send an email notification.
+    // Optionally, send an email notification using the same logic as the login OTP email.
     if (user.email) {
-      const emailSubject = "Topup Successful";
-      const emailBody = `Your topup of $${amount} for card ending ${maskedCardNumber} has been successfully completed.`;
-      await sendTopupEmail(user.email, emailSubject, emailBody);
+      await transporter.sendMail({
+        from: process.env.EMAIL_USER,
+        to: user.email,
+        subject: "Topup Successful",
+        text: `Your topup of $${amount} for card ending ${maskedCardNumber} has been successfully completed.`
+      });
     } else {
       console.warn("User email not provided; skipping email notification.");
     }
-  } catch (error) {
+    } catch (error) {
     console.error("Error processing topup notification:", error);
+    }
   }
-}
 
 // New endpoint to fetch notifications from the dedicated notifications database/collection
 app.get('/notifications', async (req, res) => {
